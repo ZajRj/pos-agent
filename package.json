@@ -1,0 +1,34 @@
+{
+  "name": "pos-agent",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node build.js"
+  },
+  "bin": {
+    "pos-agent": "./src/server.js",
+    "setup": "./src/setup.js",
+    "uninstall": "./src/uninstall.js"
+  },
+  "pkg": {
+    "assets": [
+      "src/config.json",
+      "payload/**/*"
+    ]
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "node-thermal-printer": "^4.5.0"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1",
+    "selfsigned": "^5.5.0"
+  }
+}
