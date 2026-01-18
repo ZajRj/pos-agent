@@ -7,31 +7,37 @@ const path = require('path');
 const { printTicket } = require('./printing');
 
 
+const config = require('./config');
 const isPkg = typeof process.pkg !== 'undefined';
 const execDir = isPkg ? path.dirname(process.execPath) : __dirname;
 
-// 1. Cargar Configuración
-let config;
-const configPathExternal = path.join(execDir, 'config.json');
-const configPathInternal = path.join(__dirname, 'config.json');
-
-try {
-    if (fs.existsSync(configPathExternal)) {
-        console.log(`Cargando configuración desde: ${configPathExternal}`);
-        config = JSON.parse(fs.readFileSync(configPathExternal));
-    } else {
-        console.log(`Cargando configuración interna`);
-        config = JSON.parse(fs.readFileSync(configPathInternal));
-    }
-} catch (error) {
-    console.error("Error leyendo config.json. Usando valores por defecto.");
-    config = { port: 3000, test_mode: true, printer: { type: 'epson', width: 48 } };
-}
+// Config is already loaded by require('./config')
+console.log(`[SERVER] Config loaded based on: ${execDir}`);
 
 const app = express();
 
 // 2. Middleware
-app.use(cors());
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        // If allowed_origins is defined in config, enforce it
+        if (config.allowed_origins && Array.isArray(config.allowed_origins) && config.allowed_origins.length > 0) {
+            if (config.allowed_origins.indexOf(origin) !== -1) {
+                callback(null, true);
+            } else {
+                console.warn(`Blocked CORS request from: ${origin}`);
+                callback(new Error('Not allowed by CORS'));
+            }
+        } else {
+            // Default: Allow all if not configured
+            callback(null, true);
+        }
+    }
+};
+
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // --- Log Capture ---

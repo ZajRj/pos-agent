@@ -39,8 +39,7 @@ function buildCore() {
         fs.unlinkSync(path.join(PAYLOAD_DIR, 'setup-win.exe'));
     }
 
-    // Copy config.json to payload
-    fs.copyFileSync(path.join(__dirname, 'src/config.json'), path.join(PAYLOAD_DIR, 'config.json'));
+
     // Copy launcher.vbs to payload
     fs.copyFileSync(path.join(__dirname, 'src/launcher.vbs'), path.join(PAYLOAD_DIR, 'launcher.vbs'));
 }

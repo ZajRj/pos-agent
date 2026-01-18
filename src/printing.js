@@ -1,14 +1,7 @@
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
 const fs = require('fs');
 
-// Load config
-let config;
-try {
-    const rawConfig = fs.readFileSync('./config.json');
-    config = JSON.parse(rawConfig);
-} catch (error) {
-    config = { printer: { type: 'epson', width: 48, characterSet: 'PC852_LATIN2' }, test_mode: true };
-}
+const config = require('./config');
 
 const printer = new ThermalPrinter({
     type: config.printer.type === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
