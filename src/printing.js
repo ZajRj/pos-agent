@@ -2,6 +2,15 @@ const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
 const fs = require('fs');
 const config = require('./config');
 
+// --- Configuration ---
+const LINE_WIDTH = config.printer.width || 48;
+const TABLE_LAYOUT = [
+    { text: "DES", align: "LEFT", width: 0.45, bold: true },
+    { text: "CAN", align: "RIGHT", width: 0.15, bold: true },
+    { text: "PRECIO", align: "RIGHT", width: 0.20, bold: true },
+    { text: "TOTAL", align: "RIGHT", width: 0.20, bold: true }
+];
+
 let printerInstance = null;
 
 function getPrinter() {
@@ -14,11 +23,9 @@ function getPrinter() {
             width: config.printer.width,
             characterSet: config.printer.characterSet,
             removeSpecialCharacters: false
-            // driver: require('printer') // Needs 'printer' or 'electron-printer' for 'printer:' interface
         });
         return printerInstance;
     } catch (e) {
-        // Log error but don't crash app yet
         console.error("Failed to initialize printer driver:", e.message);
         throw e;
     }
@@ -48,7 +55,7 @@ const normalizePayload = (input) => {
             identification: company.identification || "",
             phone: company.phone || "",
             activity_code: company.activity_code || "",
-            resolution: company.resolution // Might be missing, will fallback in print logic
+            resolution: company.resolution
         },
         document: {
             consecutive: rootData.consecutive || "",
@@ -66,7 +73,7 @@ const normalizePayload = (input) => {
                 quantity: qty,
                 price: price.toFixed(2),
                 total: total.toFixed(2),
-                tax_label: item.tax ? (item.tax.name || "IMP") : "EXENTO" // Fallback
+                tax_label: item.tax ? (item.tax.name || "IMP") : "EXENTO"
             };
         }),
         totals: {
@@ -77,10 +84,114 @@ const normalizePayload = (input) => {
             gravado: input.gravado,
             descuento: input.discounts,
             iva: input.taxes,
-            vuelto: 0 // Not in payload usually
+            vuelto: 0
         }
     };
 };
+
+// --- Modular Print Functions ---
+
+function printSeparator(printer) {
+    printer.println("-".repeat(LINE_WIDTH));
+}
+
+function printHeader(printer, company) {
+    printer.alignCenter();
+    printer.bold(true);
+    printer.println(company.commercial_name);
+    printer.bold(false);
+    printer.println(`CED: ${company.identification}`);
+    printer.println(`Tel: ${company.phone}`);
+    if (company.activity_code) {
+        printer.println(`Cod. Actividad Económica: ${company.activity_code}`);
+    }
+    printer.newLine();
+}
+
+function printDocumentInfo(printer, doc) {
+    printer.alignLeft();
+    printer.println(`Tiquete electrónico: ${doc.consecutive}`);
+    printer.println(`Versión del documento: ${doc.version || '4.3'}`);
+    printer.println(`Fecha: ${doc.created_at}`);
+
+    if (doc.observations) {
+        printer.println(`Observaciones:`);
+        printer.println(doc.observations);
+    }
+    printSeparator(printer);
+}
+
+function printItems(printer, items) {
+    // Headers
+    printer.tableCustom(TABLE_LAYOUT);
+    printSeparator(printer);
+
+    // Rows
+    if (items && items.length > 0) {
+        items.forEach(item => {
+            // 1. Name
+            printer.bold(true);
+            printer.alignLeft();
+            printer.println(item.name);
+            printer.bold(false);
+
+            // 2. Details (using same width distribution as headers for alignment)
+            printer.tableCustom([
+                { text: item.tax_label || "GRAVADO", align: "LEFT", width: TABLE_LAYOUT[0].width },
+                { text: item.quantity.toString(), align: "RIGHT", width: TABLE_LAYOUT[1].width },
+                { text: item.price, align: "RIGHT", width: TABLE_LAYOUT[2].width },
+                { text: item.total, align: "RIGHT", width: TABLE_LAYOUT[3].width }
+            ]);
+        });
+    }
+    printSeparator(printer);
+}
+
+function printTotals(printer, totals, itemCount) {
+    printer.alignLeft();
+    printer.println(`Numero de Items ${itemCount}.00`);
+
+    const printLine = (label, value) => printer.println(`${label} ${value}`);
+
+    if (totals) {
+        if (totals.exento) printLine("EXENTO", totals.exento);
+        if (totals.gravado) printLine("GRAVADO", totals.gravado);
+        if (totals.descuento) printLine("DESCUENTO", totals.descuento);
+        if (totals.exonerado) printLine("TOTAL EXONERADO", totals.exonerado);
+        if (totals.iva) printLine("IVA", totals.iva);
+
+        printer.bold(true);
+        printLine("TOTAL COMPROBANTE", totals.total);
+        printer.bold(false);
+
+        if (totals.vuelto) {
+            printer.bold(true);
+            printLine("Vuelto", totals.vuelto);
+            printer.bold(false);
+        }
+    }
+    printSeparator(printer);
+    printer.newLine();
+}
+
+function printFooter(printer, data) {
+    // Key
+    printer.alignLeft();
+    printer.println("Clave Numérica");
+    printer.println(data.document.key);
+    printer.newLine();
+
+    // Resolution
+    printer.alignCenter();
+    printer.bold(true);
+    printer.println("Autorizada mediante resolución No");
+    printer.println(data.company.resolution || "MH-DGT-RES-0027-2024 del 19 de noviembre de 2024");
+    printer.bold(false);
+    printer.newLine();
+    printer.newLine();
+}
+
+// --- Main Orchestrator ---
 
 const printTicket = async (rawData) => {
     const data = normalizePayload(rawData);
@@ -89,111 +200,17 @@ const printTicket = async (rawData) => {
     try {
         printer = getPrinter();
     } catch (e) {
-        console.error("Critical: Printer initialization failed. Check config or missing drivers.");
+        console.error("Critical: Printer initialization failed.", e);
         throw new Error("Printer initialization failed: " + e.message);
     }
 
     printer.clear();
 
-    // --- Header ---
-    printer.alignCenter();
-    printer.bold(true);
-    printer.println(data.company.commercial_name);
-    printer.bold(false);
-    printer.println(`CED: ${data.company.identification}`);
-    printer.println(`Tel: ${data.company.phone}`);
-    if (data.company.activity_code) {
-        printer.println(`Cod. Actividad Económica: ${data.company.activity_code}`);
-    }
-    printer.newLine();
-
-    // --- Document Info ---
-    printer.alignLeft();
-    printer.println(`Tiquete electrónico: ${data.document.consecutive}`);
-    printer.println(`Versión del documento: ${data.document.version || '4.3'}`);
-    printer.println(`Fecha: ${data.document.created_at}`);
-
-    if (data.document.observations) {
-        printer.println(`Observaciones:`);
-        printer.println(data.document.observations);
-    }
-
-    printer.println("-".repeat(config.printer.width || 48));
-
-    // --- Items Table Headers ---
-    printer.tableCustom([
-        { text: "DES", align: "LEFT", width: 0.45, bold: true },
-        { text: "CAN", align: "RIGHT", width: 0.15, bold: true },
-        { text: "PRECIO", align: "RIGHT", width: 0.20, bold: true },
-        { text: "TOTAL", align: "RIGHT", width: 0.20, bold: true }
-    ]);
-
-    printer.println("-".repeat(config.printer.width || 48));
-
-    // --- Items Detail ---
-    if (data.items && data.items.length > 0) {
-        data.items.forEach(item => {
-            // First print name
-            printer.bold(true);
-            printer.alignLeft();
-            printer.println(item.name);
-            printer.bold(false);
-
-            // Then details in a new row
-            printer.tableCustom([
-                { text: item.tax_label || "GRAVADO", align: "LEFT", width: 0.45 },
-                { text: item.quantity.toString(), align: "RIGHT", width: 0.15 },
-                { text: item.price, align: "RIGHT", width: 0.20 },
-                { text: item.total, align: "RIGHT", width: 0.20 }
-            ]);
-        });
-    }
-
-    printer.println("-".repeat(config.printer.width || 48));
-
-    // --- Totals Section ---
-    printer.alignLeft();
-    printer.println(`Numero de Items ${data.items ? data.items.length : 0}.00`);
-
-    const printTotalLine = (label, value) => {
-        printer.println(`${label} ${value}`);
-    };
-
-    if (data.totals) {
-        if (data.totals.exento) printTotalLine("EXENTO", data.totals.exento);
-        if (data.totals.gravado) printTotalLine("GRAVADO", data.totals.gravado);
-        if (data.totals.descuento) printTotalLine("DESCUENTO", data.totals.descuento);
-        if (data.totals.exonerado) printTotalLine("TOTAL EXONERADO", data.totals.exonerado);
-        if (data.totals.iva) printTotalLine("IVA", data.totals.iva);
-
-        printer.bold(true);
-        printTotalLine("TOTAL COMPROBANTE", data.totals.total);
-        printer.bold(false);
-
-        if (data.totals.vuelto) {
-            printer.bold(true);
-            printTotalLine("Vuelto", data.totals.vuelto);
-            printer.bold(false);
-        }
-    }
-
-    printer.println("-".repeat(config.printer.width || 48));
-    printer.newLine();
-
-    // --- Clave Key ---
-    printer.alignLeft();
-    printer.println("Clave Numérica");
-    printer.println(data.document.key);
-    printer.newLine();
-
-    // --- Resolution Footer ---
-    printer.alignCenter();
-    printer.bold(true);
-    printer.println("Autorizada mediante resolución No");
-    printer.println(data.company.resolution || "MH-DGT-RES-0027-2024 del 19 de noviembre de 2024");
-    printer.bold(false);
-    printer.newLine();
-    printer.newLine();
+    printHeader(printer, data.company);
+    printDocumentInfo(printer, data.document);
+    printItems(printer, data.items);
+    printTotals(printer, data.totals, data.items ? data.items.length : 0);
+    printFooter(printer, data);
 
     printer.cut();
     if (!config.test_mode) {
@@ -209,9 +226,8 @@ const printTicket = async (rawData) => {
             await printer.execute();
             console.log("Impresión enviada correctamente.");
         } catch (e) {
-            console.error("Error al enviar impresión a la impresora:", e.message);
+            console.error("Error al enviar impresión:", e.message);
             console.error("Verifique que la impresora esté encendida y conectada.");
-            // Re-throw to inform server.js
             throw new Error(`Printer Error: ${e.message}`);
         }
     }
