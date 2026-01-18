@@ -1,15 +1,28 @@
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
 const fs = require('fs');
-
 const config = require('./config');
 
-const printer = new ThermalPrinter({
-    type: config.printer.type === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
-    interface: config.test_mode ? 'tcp://0.0.0.0' : config.printer.interface,
-    width: config.printer.width,
-    characterSet: config.printer.characterSet,
-    removeSpecialCharacters: false
-});
+let printerInstance = null;
+
+function getPrinter() {
+    if (printerInstance) return printerInstance;
+
+    try {
+        printerInstance = new ThermalPrinter({
+            type: config.printer.type === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
+            interface: config.test_mode ? 'tcp://0.0.0.0' : config.printer.interface,
+            width: config.printer.width,
+            characterSet: config.printer.characterSet,
+            removeSpecialCharacters: false
+            // driver: require('printer') // Needs 'printer' or 'electron-printer' for 'printer:' interface
+        });
+        return printerInstance;
+    } catch (e) {
+        // Log error but don't crash app yet
+        console.error("Failed to initialize printer driver:", e.message);
+        throw e;
+    }
+}
 
 const normalizePayload = (input) => {
     // If it already matches the internal structure (has 'document' and 'items' at root), return it.
@@ -71,6 +84,14 @@ const normalizePayload = (input) => {
 
 const printTicket = async (rawData) => {
     const data = normalizePayload(rawData);
+
+    let printer;
+    try {
+        printer = getPrinter();
+    } catch (e) {
+        console.error("Critical: Printer initialization failed. Check config or missing drivers.");
+        throw new Error("Printer initialization failed: " + e.message);
+    }
 
     printer.clear();
 
@@ -184,8 +205,15 @@ const printTicket = async (rawData) => {
         fs.writeFileSync('ticket_simulado.bin', buffer);
         console.log("Ticket guardado en ticket_simulado.bin");
     } else {
-        await printer.execute();
-        console.log("Impresión enviada");
+        try {
+            await printer.execute();
+            console.log("Impresión enviada correctamente.");
+        } catch (e) {
+            console.error("Error al enviar impresión a la impresora:", e.message);
+            console.error("Verifique que la impresora esté encendida y conectada.");
+            // Re-throw to inform server.js
+            throw new Error(`Printer Error: ${e.message}`);
+        }
     }
 };
 

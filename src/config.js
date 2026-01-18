@@ -7,7 +7,7 @@ const defaults = {
     allowed_origins: [], // Empty = Allow All
     printer: {
         type: 'epson',
-        interface: 'printer:EPSON TM-T20II Receipt',
+        interface: 'printer:POS-58',
         width: 48,
         characterSet: 'PC852_LATIN2',
         removeSpecialCharacters: false,

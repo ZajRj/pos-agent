@@ -164,12 +164,48 @@ async function main() {
                 }
 
                 let configToCopy = null;
-                const externalConfig = path.join(path.dirname(process.execPath), 'config.json');
+
+                // 1. Check for config.json beside the installer (External Config)
+                // In pkg (EXE), process.execPath is the EXE itself. dirname is the folder containing the EXE.
+                // In node (Dev), process.execPath is node.exe. The script is setup.js.
+                // useful for bundled installers where users drop a config.json next to the setup.exe
+
+                let potentialExternalDir;
+                if (IS_PKG) {
+                    potentialExternalDir = path.dirname(process.execPath);
+                } else {
+                    // In Dev, we might want to check the root of the project or just skip foreign config check
+                    // for simplicity, let's check the project root relative to this script
+                    potentialExternalDir = path.join(__dirname, '..', '..');
+                }
+
+                const externalConfig = path.join(potentialExternalDir, 'config.json');
                 const bundledConfig = path.join(sourceDir, 'config.json');
 
+                log(`Checking for external config at: ${externalConfig}`);
+
+                if (fs.existsSync(externalConfig)) {
+                    log("Found external config.json. Using it.");
+                    configToCopy = externalConfig;
+                } else if (fs.existsSync(bundledConfig)) {
+                    log(`External config not found. Checking bundled config at: ${bundledConfig}`);
+                    if (fs.existsSync(bundledConfig)) {
+                        log("Found bundled config.json. Using it.");
+                        configToCopy = bundledConfig;
+                    }
+                } else {
+                    log("No config.json found (neither external nor bundled). Using defaults.");
+                }
+
                 if (configToCopy) {
-                    log(`Copying config to ${path.join(TARGET_DIR, 'config.json')}...`);
-                    fs.copyFileSync(configToCopy, path.join(TARGET_DIR, 'config.json'));
+                    const targetConfigPath = path.join(TARGET_DIR, 'config.json');
+                    log(`Copying config from ${configToCopy} to ${targetConfigPath}...`);
+                    try {
+                        fs.copyFileSync(configToCopy, targetConfigPath);
+                        log("Config copied successfully.");
+                    } catch (err) {
+                        log("Error copying config: " + err.message);
+                    }
                 }
 
                 const sourceLauncher = path.join(sourceDir, 'launcher.vbs');

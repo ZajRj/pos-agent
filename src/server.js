@@ -4,15 +4,42 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
-const { printTicket } = require('./printing');
 
-
-const config = require('./config');
+// --- Crash Logger (Initialize Early) ---
+// We need to know where to write. check isPkg logic early.
 const isPkg = typeof process.pkg !== 'undefined';
 const execDir = isPkg ? path.dirname(process.execPath) : __dirname;
+const crashLogPath = path.join(execDir, 'crash.log');
+const debugLogPath = path.join(execDir, 'debug.log');
+
+function logCrash(type, err) {
+    const msg = `[${new Date().toISOString()}] [${type}] ${err.stack || err}\n`;
+    try {
+        fs.appendFileSync(crashLogPath, msg);
+        fs.appendFileSync(debugLogPath, msg); // Also write to debug logs
+    } catch (e) {
+        console.error("Failed to write to crash log:", e);
+    }
+}
+
+process.on('uncaughtException', (err) => {
+    console.error('CRASH DETECTED. Check crash.log/debug.log. Uncaught Exception:', err);
+    logCrash('UNCAUGHT_EXCEPTION', err);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('CRASH DETECTED. Check crash.log/debug.log. Unhandled Rejection:', reason);
+    logCrash('UNHANDLED_REJECTION', reason);
+});
+// --------------------
+
+const { printTicket } = require('./printing');
+const config = require('./config');
 
 // Config is already loaded by require('./config')
 console.log(`[SERVER] Config loaded based on: ${execDir}`);
+
 
 const app = express();
 
@@ -43,15 +70,26 @@ app.use(bodyParser.json());
 // --- Log Capture ---
 const logBuffer = [];
 const MAX_LOGS = 500;
+// debugLogPath is already defined at the top
 
 function captureLog(type, args) {
     const msg = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ');
-    const entry = `[${new Date().toLocaleTimeString()}] [${type}] ${msg}`;
+    const timestamp = new Date().toISOString();
+    const entry = `[${timestamp}] [${type}] ${msg}`;
+
+    // 1. In-Memory Buffer
     logBuffer.push(entry);
     if (logBuffer.length > MAX_LOGS) logBuffer.shift();
 
-    // Original output
+    // 2. Stdout
     process.stdout.write(entry + '\n');
+
+    // 3. Persistent File Log
+    try {
+        fs.appendFileSync(debugLogPath, entry + '\n');
+    } catch (e) {
+        // Fail silently if we can't write to log file to avoid infinite loop
+    }
 }
 
 // Override console methods
