@@ -2,7 +2,7 @@
 
 > A small Node.js utility to handle ECS-POS printing requests from web apps using real printing hardware.
 
-This agent runs as a background service on Windows, exposing a local API that allows web applications (such as a generic Cloud POS) to send raw ESC/POS commands explicitly to a local thermal printer.
+This agent runs as a background service on Windows, exposing a local API that allows web applications to send raw ESC/POS commands explicitly to a local thermal printer.
 
 ## Features
 
@@ -19,6 +19,16 @@ This agent runs as a background service on Windows, exposing a local API that al
 3. Follow the on-screen instructions (the installer will configure certificates and shortcuts automatically).
 4. Upon completion, the service will start automatically.
 
+## Pre-configuration (Advanced)
+
+If you need to deploy the agent with specific settings (e.g., to multiple machines), you can **pre-configure** the installer:
+
+1. Create a `config.json` file with your desired settings (see Configuration section).
+2. Place this `config.json` file in the **same folder** as `POSAgent-Setup.exe`.
+3. Run the installer.
+
+The installer will detect the external file and use it instead of the default configuration.
+
 ## Usage
 
 Once installed, the agent listens on port **3000**.
@@ -31,14 +41,6 @@ Visit `https://localhost:3000/` in your browser to view the status dashboard and
 **POST** `/imprimir`
 Sends a print job to the configured printer.
 
-**Payload:**
-```json
-{
-  "printer": "EPSON Check",
-  "data": "..." // Print data
-}
-```
-
 ## Configuration
 
 A `config.json` file is located in `%LOCALAPPDATA%\POSAgent\config.json`. You can modify it to change the listening port or default printer settings.
@@ -48,8 +50,11 @@ A `config.json` file is located in `%LOCALAPPDATA%\POSAgent\config.json`. You ca
   "port": 3000,
   "printer": {
     "type": "epson",
-    "width": 48
-  }
+    "interface": "printer:EPSON TM-T20II Receipt", 
+    "width": 48,
+    "characterSet": "PC852_LATIN2"
+  },
+  "test_mode": true
 }
 ```
 
