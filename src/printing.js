@@ -3,13 +3,13 @@ const fs = require('fs');
 const config = require('./config');
 
 // --- Configuration ---
-const LINE_WIDTH = config.printer.width || 48;
+const LINE_WIDTH = config.printer.width || 32; // Default to 32 for POS-58
 const TABLE_LAYOUT = [
-    { text: "DES", align: "LEFT", width: 0.45, bold: true },
-    { text: "CAN", align: "RIGHT", width: 0.15, bold: true },
-    { text: "PRECIO", align: "RIGHT", width: 0.20, bold: true },
-    { text: "TOTAL", align: "RIGHT", width: 0.20, bold: true }
+    { text: "CAN", align: "LEFT", width: 0.20, bold: true },
+    { text: "PRECIO", align: "RIGHT", width: 0.40, bold: true },
+    { text: "TOTAL", align: "RIGHT", width: 0.40, bold: true }
 ];
+
 
 let printerInstance = null;
 
@@ -137,10 +137,9 @@ function printItems(printer, items) {
 
             // 2. Details (using same width distribution as headers for alignment)
             printer.tableCustom([
-                { text: item.tax_label || "GRAVADO", align: "LEFT", width: TABLE_LAYOUT[0].width },
-                { text: item.quantity.toString(), align: "RIGHT", width: TABLE_LAYOUT[1].width },
-                { text: item.price, align: "RIGHT", width: TABLE_LAYOUT[2].width },
-                { text: item.total, align: "RIGHT", width: TABLE_LAYOUT[3].width }
+                { text: item.quantity.toString(), align: "LEFT", width: TABLE_LAYOUT[0].width },
+                { text: item.price, align: "RIGHT", width: TABLE_LAYOUT[1].width },
+                { text: item.total, align: "RIGHT", width: TABLE_LAYOUT[2].width }
             ]);
         });
     }
