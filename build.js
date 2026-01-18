@@ -32,16 +32,16 @@ function buildCore() {
 
     // Rename outputs to match expected filenames
     rename(path.join(PAYLOAD_DIR, 'pos-agent-win.exe'), path.join(PAYLOAD_DIR, 'pos-agent.exe'));
-    rename(path.join(PAYLOAD_DIR, 'uninstall-win.exe'), path.join(PAYLOAD_DIR, 'uninstall.exe'));
 
-    // Delete the setup artifact from payload (it will be built separately as the installer)
-    if (fs.existsSync(path.join(PAYLOAD_DIR, 'setup-win.exe'))) {
-        fs.unlinkSync(path.join(PAYLOAD_DIR, 'setup-win.exe'));
-    }
+    // Build uninstall.exe
+    run(`npx pkg src/installer/uninstall.js -c package.json --target node18-win-x64 --output ${path.join(PAYLOAD_DIR, 'uninstall.exe')} --compress GZip`);
+
+    // Copy config.json to payload
+    // fs.copyFileSync(path.join(__dirname, 'src/config.json'), path.join(PAYLOAD_DIR, 'config.json'));
 
 
     // Copy launcher.vbs to payload
-    fs.copyFileSync(path.join(__dirname, 'src/launcher.vbs'), path.join(PAYLOAD_DIR, 'launcher.vbs'));
+    fs.copyFileSync(path.join(__dirname, 'src/installer/launcher.vbs'), path.join(PAYLOAD_DIR, 'launcher.vbs'));
 }
 
 function buildSetup() {
@@ -52,12 +52,12 @@ function buildSetup() {
         throw new Error("Payload missing.");
     }
 
-    run(`npx pkg src/setup.js -c package.json --target node18-win-x64 --output ${path.join(DIST_DIR, 'POSAgent-Setup.exe')} --compress GZip`);
+    run(`npx pkg src/installer/setup.js -c package.json --target node18-win-x64 --output ${path.join(DIST_DIR, 'POSAgent-Setup.exe')} --compress GZip`);
 
     console.log(`Installer ready at: ${path.join(DIST_DIR, 'POSAgent-Setup.exe')}`);
 
     // Clean up extra binaries generated in dist
-    ['pos-agent-win.exe', 'uninstall-win.exe'].forEach(f => {
+    ['pos-agent-win.exe'].forEach(f => {
         const p = path.join(DIST_DIR, f);
         if (fs.existsSync(p)) fs.unlinkSync(p);
     });

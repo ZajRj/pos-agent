@@ -125,18 +125,20 @@ async function main() {
         // 3. Resolve Source Directory (Payload)
         let sourceDir;
         if (IS_PKG) {
-            const payloadInDir = path.join(__dirname, 'payload');
-            const payloadUp = path.join(__dirname, '..', 'payload');
+            // In pkg snapshot, we are at src/installer/setup.js
+            // payload is at root /payload
+            // So we need to go up two levels: ../../payload
+            const payloadInSnapshot = path.join(__dirname, '..', '..', 'payload');
 
-            if (fs.existsSync(payloadInDir)) {
-                sourceDir = payloadInDir;
-            } else if (fs.existsSync(payloadUp)) {
-                sourceDir = payloadUp;
+            if (fs.existsSync(payloadInSnapshot)) {
+                sourceDir = payloadInSnapshot;
             } else {
-                sourceDir = payloadInDir;
+                // Fallback or debug
+                sourceDir = path.join(__dirname, 'payload');
             }
         } else {
-            sourceDir = path.join(__dirname, '..', 'payload');
+            // In dev: src/installer/setup.js -> root/payload is ../../payload
+            sourceDir = path.join(__dirname, '..', '..', 'payload');
         }
 
         const sourceExe = path.join(sourceDir, 'pos-agent.exe');

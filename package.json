@@ -9,8 +9,8 @@
   },
   "bin": {
     "pos-agent": "./src/server.js",
-    "setup": "./src/setup.js",
-    "uninstall": "./src/uninstall.js"
+    "setup": "./src/installer/setup.js",
+    "uninstall": "./src/installer/uninstall.js"
   },
   "pkg": {
     "assets": [
