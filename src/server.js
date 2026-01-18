@@ -57,69 +57,12 @@ console.error = (...args) => captureLog('ERROR', args);
 
 // --- End Log Capture ---
 
-// Ruta de estado con UI básica
-app.get('/', (req, res) => {
-    const configDisplay = { ...config };
+// Ruta de estado
+app.use(express.static(path.join(__dirname, 'public')));
 
-    const html = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>POS Agent Status</title>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; color: #333; display: flex; justify-content: center; padding-top: 20px; box-sizing: border-box; }
-            .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 800px; width: 95%; display: flex; flex-direction: column; height: 90vh; }
-            h1 { color: #2c3e50; margin-top: 0; margin-bottom: 10px; }
-            .status { display: inline-block; padding: 5px 10px; border-radius: 4px; background-color: #2ecc71; color: white; font-weight: bold; font-size: 0.9em; }
-            .section { margin-bottom: 20px; }
-            .config-box { background: #2d3436; color: #dfe6e9; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 0.85em; max-height: 150px; }
-            .logs-box { background: #1e1e1e; color: #00ff00; padding: 10px; border-radius: 4px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.85em; flex-grow: 1; white-space: pre-wrap; word-wrap: break-word; }
-            pre { margin: 0; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>POS Agent <span class="status">Running</span></h1>
-                <p style="margin: 0 0 10px;">Listening on port <strong>${config.port}</strong></p>
-            </div>
-            
-            <div class="section">
-                <h3>Configuration</h3>
-                <div class="config-box">
-                    <pre>${JSON.stringify(configDisplay, null, 2)}</pre>
-                </div>
-            </div>
-
-            <div class="section" style="display: flex; flex-direction: column; flex-grow: 1;">
-                <h3>Live Logs</h3>
-                <div class="logs-box" id="logContainer">Loading logs...</div>
-            </div>
-        </div>
-
-        <script>
-            function fetchLogs() {
-                fetch('/api/logs')
-                    .then(response => response.json())
-                    .then(data => {
-                        const container = document.getElementById('logContainer');
-                        container.textContent = data.join('\\n');
-                        // Auto-scroll but allow user to scroll up? For now simple auto-scroll
-                        container.scrollTop = container.scrollHeight;
-                    })
-                    .catch(err => console.error('Failed to fetch logs', err));
-            }
-
-            // Poll every 2 seconds
-            setInterval(fetchLogs, 2000);
-            fetchLogs();
-        </script>
-    </body>
-    </html>
-    `;
-    res.send(html);
+app.get('/api/config', (req, res) => {
+    // Hide sensitive info if necessary, for now returning full config
+    res.json(config);
 });
 
 // Logs Endpoint
