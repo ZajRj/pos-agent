@@ -25,7 +25,7 @@ function error(msg) {
     setTimeout(() => process.exit(1), 5000);
 }
 
-// 1. Check Admin
+
 function checkAdmin() {
     try {
         execSync('net session', { stdio: 'ignore' });
@@ -36,7 +36,7 @@ function checkAdmin() {
     }
 }
 
-// 2. Generate and Trust Certificate
+
 async function setupCertificates() {
     log("Generating SSL Certificates...");
     const attrs = [{ name: 'commonName', value: 'localhost' }];
@@ -59,54 +59,7 @@ async function setupCertificates() {
     }
 }
 
-function createShortcuts() {
-    log("Creating Shortcuts...");
-    const getSpecialFolder = (folderName) => {
-        try {
-            const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetFolderPath('${folderName}')"`;
-            return execSync(cmd).toString().trim();
-        } catch (e) {
-            log(`Error getting folder ${folderName}: ${e.message}`);
-            return null;
-        }
-    };
 
-    const desktopPath = getSpecialFolder('Desktop') || path.join(process.env.USERPROFILE, 'Desktop');
-    const startMenuPath = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
-
-    log(`Desktop Path Resolved: ${desktopPath}`);
-    log(`Startup Path Resolved: ${startMenuPath}`);
-
-    const createShortcutPs = (target, shortcutPath, desc) => {
-        log(`Creating shortcut: ${shortcutPath}`);
-        log(`-> Target: ${target}`);
-
-        const script = `$s=(New-Object -COM WScript.Shell).CreateShortcut('${shortcutPath}');$s.TargetPath='${target}';$s.Description='${desc}';$s.WorkingDirectory='${path.dirname(target)}';$s.Save()`;
-
-        try {
-            execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${script}"`, { stdio: 'inherit' });
-
-            if (fs.existsSync(shortcutPath)) {
-                log("Shortcut created successfully.");
-            } else {
-                log("Warning: Shortcut file not found after creation command.");
-            }
-        } catch (e) {
-            log(`Error creating shortcut: ${e.message}`);
-        }
-    };
-
-    // Main App Shortcut on Desktop
-    createShortcutPs(TARGET_EXE, path.join(desktopPath, `${APP_NAME}.lnk`), "Start POS Agent");
-
-    // Auto-start Shortcut
-    createShortcutPs(TARGET_EXE, path.join(startMenuPath, `${APP_NAME}.lnk`), "Start POS Agent");
-
-    // Uninstall Shortcut in Install Dir (or Start Menu if we made a folder there, but keeping it simple)
-    createShortcutPs(TARGET_UNINSTALLER, path.join(desktopPath, `Uninstall ${APP_NAME}.lnk`), "Uninstall POS Agent");
-
-    log("Shortcuts process finished.");
-}
 
 async function main() {
     console.log("==========================================");
@@ -122,7 +75,7 @@ async function main() {
             log(`Created installation directory: ${TARGET_DIR}`);
         }
 
-        // 3. Resolve Source Directory (Payload)
+        // Resolve Source Directory (Payload)
         let sourceDir;
         if (IS_PKG) {
             // In pkg snapshot, we are at src/installer/setup.js
@@ -143,7 +96,6 @@ async function main() {
 
         const sourceExe = path.join(sourceDir, 'pos-agent.exe');
         const sourceUninstall = path.join(sourceDir, 'uninstall.exe');
-        const sourceConfig = path.join(sourceDir, 'config.json');
 
         if (!fs.existsSync(sourceExe)) {
             if (!IS_PKG && sourceDir === __dirname) {

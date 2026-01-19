@@ -5,7 +5,7 @@
   ],
   "printer": {
     "type": "epson",
-    "interface": "printer:POS-58"
+    "interface": "\\\\localhost\\POS-58"
   },
   "test_mode": false
 }
