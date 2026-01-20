@@ -174,6 +174,8 @@ async function main() {
             await setupCertificates();
 
             if (IS_PKG) {
+                const { createShortcut, getStartupPath, getDesktopPath } = require('../utils/shortcuts');
+
                 // Update: Point shortcuts to launcher.vbs instead of exe for headless mode
                 const vbsPath = path.join(TARGET_DIR, 'launcher.vbs');
                 const vbsTarget = fs.existsSync(vbsPath) ? vbsPath : TARGET_EXE;
@@ -181,50 +183,23 @@ async function main() {
 
                 log("Creating Shortcuts...");
 
-                // Helper to resolve paths
-                const getSpecialFolder = (folderName) => {
-                    try {
-                        const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetFolderPath('${folderName}')"`;
-                        return execSync(cmd).toString().trim();
-                    } catch (e) {
-                        log(`Error getting folder ${folderName}: ${e.message}`);
-                        return null;
-                    }
-                };
+                const desktopPath = getDesktopPath();
+                const startMenuPath = getStartupPath();
 
-                const desktopPath = getSpecialFolder('Desktop') || path.join(process.env.USERPROFILE, 'Desktop');
-                const startMenuPath = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
-
-                log(`Desktop Path Resolved: ${desktopPath}`);
-                log(`Startup Path Resolved: ${startMenuPath}`);
-
-                const createShortcutPs = (target, shortcutPath, desc, iconPath) => {
-                    log(`Creating shortcut: ${shortcutPath}`);
-                    log(`-> Target: ${target}`);
-
-                    // For VBS files, we might want to set the icon to the EXE
-                    let iconScript = "";
-                    if (iconPath) {
-                        iconScript = `$s.IconLocation='${iconPath}';`;
-                    }
-
-                    const script = `$s=(New-Object -COM WScript.Shell).CreateShortcut('${shortcutPath}');$s.TargetPath='${target}';$s.Description='${desc}';$s.WorkingDirectory='${path.dirname(target)}';${iconScript}$s.Save()`;
-
-                    try {
-                        execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${script}"`, { stdio: 'inherit' });
-                    } catch (e) {
-                        log(`Error creating shortcut: ${e.message}`);
-                    }
-                };
+                log(`Desktop Path: ${desktopPath}`);
+                log(`Startup Path: ${startMenuPath}`);
 
                 // Main App Shortcut on Desktop (points to VBS)
-                createShortcutPs(vbsTarget, path.join(desktopPath, `${APP_NAME}.lnk`), desc, TARGET_EXE);
+                createShortcut(vbsTarget, path.join(desktopPath, `${APP_NAME}.lnk`), desc, TARGET_EXE);
+                log("Desktop shortcut created.");
 
                 // Auto-start Shortcut (points to VBS)
-                createShortcutPs(vbsTarget, path.join(startMenuPath, `${APP_NAME}.lnk`), desc, TARGET_EXE);
+                createShortcut(vbsTarget, path.join(startMenuPath, `${APP_NAME}.lnk`), desc, TARGET_EXE);
+                log("Startup shortcut created.");
 
                 // Uninstall Shortcut (keeps pointing to uninstall.exe)
-                createShortcutPs(TARGET_UNINSTALLER, path.join(desktopPath, `Uninstall ${APP_NAME}.lnk`), "Uninstall POS Agent");
+                createShortcut(TARGET_UNINSTALLER, path.join(desktopPath, `Uninstall ${APP_NAME}.lnk`), "Uninstall POS Agent");
+                log("Uninstall shortcut created.");
 
                 log("Shortcuts process finished.");
             }

@@ -49,6 +49,11 @@ const corsOptions = {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
 
+        // HARDCODED: Always allow localhost/127.0.0.1 to prevent lockout
+        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+            return callback(null, true);
+        }
+
         // If allowed_origins is defined in config, enforce it
         if (config.allowed_origins && Array.isArray(config.allowed_origins) && config.allowed_origins.length > 0) {
             if (config.allowed_origins.indexOf(origin) !== -1) {
@@ -122,15 +127,99 @@ app.post('/imprimir', async (req, res) => {
 
     try {
         await printTicket(data);
-
         res.json({ status: 'ok', msg: 'Ticket procesado' });
-
     } catch (error) {
         console.error("Error:", error.message);
-
         res.status(500).json({ status: 'error', msg: error.message });
     }
 });
+
+// --- System Management APIs ---
+const { createShortcut, removeShortcut, getStartupPath } = require('./utils/shortcuts');
+
+// Save Config
+app.post('/api/config', (req, res) => {
+    try {
+        const newConfig = { ...config, ...req.body };
+
+        // Auto-fix Windows Network Paths (e.g. //localhost/POS-58 -> \\localhost\POS-58)
+        if (newConfig.printer && typeof newConfig.printer.interface === 'string') {
+            let iface = newConfig.printer.interface;
+            if (iface.startsWith('//') || iface.startsWith('\\\\')) {
+                newConfig.printer.interface = iface.replace(/\//g, '\\');
+            }
+        }
+
+        // Write to config.json next to executable/script
+        const configPath = path.join(execDir, 'config.json');
+        fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
+
+        // Update in-memory config
+        Object.assign(config, newConfig);
+
+        console.log("Config updated.");
+        res.json({ status: 'ok', msg: 'Configuración guardada.' });
+    } catch (e) {
+        console.error("Error saving config:", e);
+        res.status(500).json({ status: 'error', msg: e.message });
+    }
+});
+
+// Stop Service
+app.post('/api/service/stop', (req, res) => {
+    console.log("Stop request received.");
+    res.json({ status: 'ok', msg: 'Deteniendo servicio...' });
+    setTimeout(() => {
+        console.log("Exiting...");
+        process.exit(0);
+    }, 1000);
+});
+
+// Check Autostart Status
+app.get('/api/service/autostart', (req, res) => {
+    try {
+        const startupPath = getStartupPath();
+        const linkPath = path.join(startupPath, 'POS Agent.lnk');
+        const isEnabled = fs.existsSync(linkPath);
+        res.json({ status: 'ok', enabled: isEnabled });
+    } catch (e) {
+        res.status(500).json({ status: 'error', msg: e.message });
+    }
+});
+
+// Toggle Autostart
+app.post('/api/service/autostart', (req, res) => {
+    const { enable } = req.body;
+    const startupPath = getStartupPath();
+    const linkPath = path.join(startupPath, 'POS Agent.lnk');
+
+    try {
+        if (enable) {
+            // Re-create shortcut
+            const vbsPath = path.join(execDir, 'launcher.vbs');
+            // If running as pkg, process.execPath is the exe.
+            // If running node, process.execPath is node.exe
+            const targetExe = isPkg ? process.execPath : path.join(execDir, 'pos-agent.exe'); // Fallback logic
+
+            const target = fs.existsSync(vbsPath) ? vbsPath : targetExe;
+
+            // Icon
+            const icon = isPkg ? process.execPath : undefined;
+
+            createShortcut(target, linkPath, "Start POS Agent (Background)", icon);
+            console.log("Autostart Enabled.");
+            res.json({ status: 'ok', enabled: true, msg: 'Inicio automático activado' });
+        } else {
+            removeShortcut(linkPath);
+            console.log("Autostart Disabled.");
+            res.json({ status: 'ok', enabled: false, msg: 'Inicio automático desactivado' });
+        }
+    } catch (e) {
+        console.error("Autostart toggle error:", e);
+        res.status(500).json({ status: 'error', msg: e.message });
+    }
+});
+
 
 // Iniciar Servidor (HTTPS con fallback a HTTP)
 const startServer = () => {
