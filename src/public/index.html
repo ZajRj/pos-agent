@@ -251,9 +251,13 @@
                     <input type="checkbox" id="autostartToggle">
                     <span class="slider"></span>
                 </label>
-                <span>Auto-Start on Boot</span>
+                <span>Auto-Start</span>
             </div>
-            <button class="btn-danger" onclick="stopService()">Stop Service</button>
+            <div style="display: flex; gap: 10px;">
+                <button class="theme-btn" onclick="checkUpdate()"
+                    style="border-color: var(--success-color); color: var(--success-color);">Check Update</button>
+                <button class="btn-danger" onclick="stopService()" style="width: auto;">Stop Service</button>
+            </div>
         </div>
 
         <!-- Configuration Form -->
@@ -278,6 +282,10 @@
                     <input type="checkbox" id="testMode">
                     <label for="testMode" style="margin:0">Test Mode (Save to file)</label>
                 </div>
+            </div>
+            <div class="form-group">
+                <label>Update URL</label>
+                <input type="text" id="updateUrl" placeholder="https://example.com/version.json">
             </div>
             <div class="form-group">
                 <label>Allowed Origins</label>
@@ -332,6 +340,7 @@
                 document.getElementById('width').value = config.printer?.width || 32;
                 document.getElementById('configPort').value = config.port || 3000;
                 document.getElementById('testMode').checked = config.test_mode || false;
+                document.getElementById('updateUrl').value = config.update_url || '';
 
                 if (Array.isArray(config.allowed_origins)) {
                     document.getElementById('origins').value = config.allowed_origins.join(',\n');
@@ -355,6 +364,7 @@
                 port: parseInt(document.getElementById('configPort').value),
                 test_mode: document.getElementById('testMode').checked,
                 allowed_origins: document.getElementById('origins').value.split(',').map(s => s.trim()).filter(Boolean),
+                update_url: document.getElementById('updateUrl').value,
                 printer: {
                     type: 'epson',
                     interface: document.getElementById('interface').value,
@@ -375,6 +385,16 @@
             } catch (e) {
                 showStatus('Save failed: ' + e.message, 'error');
             }
+        }
+
+        async function checkUpdate() {
+            showStatus('Checking for updates...', 'success');
+            try {
+                const res = await fetch(`${API_URL}/service/update`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'ok') showStatus(data.msg, 'success');
+                else showStatus(data.msg, 'error');
+            } catch (e) { showStatus(e.message, 'error'); }
         }
 
         async function stopService() {

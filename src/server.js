@@ -36,6 +36,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const { printTicket } = require('./printing');
 const config = require('./config');
+const pkg = require('../package.json');
 
 // Config is already loaded by require('./config')
 console.log(`[SERVER] Config loaded based on: ${execDir}`);
@@ -220,6 +221,52 @@ app.post('/api/service/autostart', (req, res) => {
     }
 });
 
+
+// --- Auto-Updater ---
+const { checkForUpdate, downloadUpdate, installUpdate } = require('./updater');
+
+app.post('/api/service/update', async (req, res) => {
+    const updateUrl = config.update_url;
+    if (!updateUrl) return res.status(400).json({ status: 'error', msg: 'No update_url configured' });
+
+    try {
+        console.log(`Checking for updates from ${updateUrl}...`);
+        const update = await checkForUpdate(updateUrl, pkg.version);
+
+        if (update.available) {
+            console.log(`Update found: ${update.version}. Downloading...`);
+            const tempFile = path.join(execDir, 'update.tmp.exe');
+            await downloadUpdate(update.url, tempFile);
+
+            console.log("Download complete. Installing...");
+            res.json({ status: 'ok', msg: 'Downloading update... Agent will restart.' });
+
+            // Allow response to flush
+            setTimeout(() => installUpdate(tempFile), 1000);
+        } else {
+            console.log("No updates available.");
+            res.json({ status: 'ok', msg: 'You are on the latest version.' });
+        }
+    } catch (e) {
+        console.error("Update failed:", e);
+        res.status(500).json({ status: 'error', msg: e.message });
+    }
+});
+
+// Poll for updates if configured
+if (config.update_url) {
+    console.log(`Auto-updater active. Polling ${config.update_url}`);
+    setInterval(async () => {
+        try {
+            const update = await checkForUpdate(config.update_url, pkg.version);
+            if (update.available) {
+                const tempFile = path.join(execDir, 'update.tmp.exe');
+                await downloadUpdate(update.url, tempFile);
+                installUpdate(tempFile);
+            }
+        } catch (e) { /* silent fail */ }
+    }, 1000 * 60 * (60 * 12)); // 12 hours
+}
 
 // Iniciar Servidor (HTTPS con fallback a HTTP)
 const startServer = () => {
