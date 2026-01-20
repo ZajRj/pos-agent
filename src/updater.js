@@ -75,21 +75,37 @@ function checkForUpdate(updateUrl, currentVersion) {
  * @param {string} fileUrl 
  * @param {string} destPath 
  */
+/**
+ * Download the update file (supports redirects)
+ * @param {string} fileUrl 
+ * @param {string} destPath 
+ */
 function downloadUpdate(fileUrl, destPath) {
     return new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(destPath);
-        https.get(fileUrl, (res) => {
-            if (res.statusCode !== 200) {
-                return reject(new Error(`Download failed. Status: ${res.statusCode}`));
-            }
-            res.pipe(file);
-            file.on('finish', () => {
-                file.close(resolve);
+        const get = (url, redirectCount = 0) => {
+            if (redirectCount > 5) return reject(new Error('Too many redirects'));
+
+            https.get(url, (res) => {
+                // Handle Redirects
+                if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+                    return get(res.headers.location, redirectCount + 1);
+                }
+
+                if (res.statusCode !== 200) {
+                    return reject(new Error(`Download failed. Status: ${res.statusCode}`));
+                }
+
+                const file = fs.createWriteStream(destPath);
+                res.pipe(file);
+                file.on('finish', () => {
+                    file.close(resolve);
+                });
+            }).on('error', (err) => {
+                try { fs.unlinkSync(destPath); } catch (e) { }
+                reject(err);
             });
-        }).on('error', (err) => {
-            fs.unlink(destPath, () => { });
-            reject(err);
-        });
+        };
+        get(fileUrl);
     });
 }
 
