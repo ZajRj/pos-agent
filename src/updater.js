@@ -28,31 +28,45 @@ function isNewer(local, remote) {
  * @param {string} currentVersion - Current app version
  * @returns {Promise<{available: boolean, version: string, url: string}>}
  */
+/**
+ * Check for updates (supports redirects)
+ * @param {string} updateUrl 
+ * @param {string} currentVersion 
+ */
 function checkForUpdate(updateUrl, currentVersion) {
     return new Promise((resolve, reject) => {
         if (!updateUrl) return resolve({ available: false });
 
-        https.get(updateUrl, (res) => {
-            if (res.statusCode !== 200) {
-                return reject(new Error(`Failed to check update. Status: ${res.statusCode}`));
-            }
+        const get = (url, redirectCount = 0) => {
+            if (redirectCount > 5) return reject(new Error('Too many redirects'));
 
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const info = JSON.parse(data);
-                    // Expected format: { "version": "1.2.0", "url": "https://.../app.exe" }
-                    if (isNewer(currentVersion, info.version)) {
-                        resolve({ available: true, version: info.version, url: info.url });
-                    } else {
-                        resolve({ available: false, version: info.version });
-                    }
-                } catch (e) {
-                    reject(e);
+            https.get(url, (res) => {
+                // Handle Redirects
+                if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+                    return get(res.headers.location, redirectCount + 1);
                 }
-            });
-        }).on('error', (e) => reject(e));
+
+                if (res.statusCode !== 200) {
+                    return reject(new Error(`Failed to check update. Status: ${res.statusCode}`));
+                }
+
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const info = JSON.parse(data);
+                        if (isNewer(currentVersion, info.version)) {
+                            resolve({ available: true, version: info.version, url: info.url });
+                        } else {
+                            resolve({ available: false, version: info.version });
+                        }
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }).on('error', (e) => reject(e));
+        };
+        get(updateUrl);
     });
 }
 
