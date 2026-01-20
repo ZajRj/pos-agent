@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { printTicket } = require('./printing');
+const { printTicket, printGeneric } = require('./printing');
 const { createShortcut, removeShortcut, getStartupPath } = require('./utils/shortcuts');
 const { checkForUpdate, downloadUpdate, installUpdate } = require('./updater');
 
@@ -35,6 +35,18 @@ module.exports = (app, ctx) => {
         try {
             await printTicket(data);
             res.json({ status: 'ok', msg: 'Ticket procesado' });
+        } catch (error) {
+            console.error("Error:", error.message);
+            res.status(500).json({ status: 'error', msg: error.message });
+        }
+    });
+    app.post('/print/generic', async (req, res) => {
+        const data = req.body;
+        console.log(`[${new Date().toLocaleTimeString()}] Nueva orden recibida`);
+
+        try {
+            await printGeneric(data);
+            res.json({ status: 'ok', msg: 'Generic print success' });
         } catch (error) {
             console.error("Error:", error.message);
             res.status(500).json({ status: 'error', msg: error.message });

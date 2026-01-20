@@ -88,8 +88,11 @@ function downloadUpdate(fileUrl, destPath) {
             https.get(url, (res) => {
                 // Handle Redirects
                 if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+                    console.log(`[Updater] Redirect (${res.statusCode}) -> ${res.headers.location}`);
                     return get(res.headers.location, redirectCount + 1);
                 }
+
+                console.log(`[Updater] Response: ${res.statusCode}. Content-Length: ${res.headers['content-length']}`);
 
                 if (res.statusCode !== 200) {
                     return reject(new Error(`Download failed. Status: ${res.statusCode}`));
@@ -97,7 +100,12 @@ function downloadUpdate(fileUrl, destPath) {
 
                 const file = fs.createWriteStream(destPath);
                 res.pipe(file);
+
+                let downloaded = 0;
+                res.on('data', chunk => downloaded += chunk.length);
+
                 file.on('finish', () => {
+                    console.log(`[Updater] Download finished. Total: ${downloaded} bytes.`);
                     file.close(resolve);
                 });
             }).on('error', (err) => {

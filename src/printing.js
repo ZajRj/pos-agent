@@ -232,4 +232,44 @@ const printTicket = async (rawData) => {
     }
 };
 
-module.exports = { printTicket };
+const printGeneric = async (data) => {
+    let printer;
+    try {
+        printer = getPrinter();
+    } catch (e) {
+        console.error("Critical: Printer initialization failed.", e);
+        throw new Error("Printer initialization failed: " + e.message);
+    }
+
+    printer.clear();
+
+    //expected json {lines: ["line1", "line2"]}
+    data.lines.forEach(line => {
+        printer.println(line);
+    });
+
+    printer.newLine();
+    
+    printer.cut();
+
+    if (!config.test_mode) {
+        printer.beep();
+    }
+
+    if (config.test_mode) {
+        const buffer = printer.getBuffer();
+        fs.writeFileSync('ticket_simulado.bin', buffer);
+        console.log("Ticket guardado en ticket_simulado.bin");
+    } else {
+        try {
+            await printer.execute();
+            console.log("Impresión enviada correctamente.");
+        } catch (e) {
+            console.error("Error al enviar impresión:", e.message);
+            console.error("Verifique que la impresora esté encendida y conectada.");
+            throw new Error(`Printer Error: ${e.message}`);
+        }
+    }
+};
+
+module.exports = { printTicket, printGeneric };
