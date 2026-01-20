@@ -4,6 +4,7 @@ const path = require('path');
 const defaults = {
     port: 3000,
     test_mode: true,
+    update_url: "https://ticofacturacr.com/downloads/pos-agent/version.json",
     allowed_origins: [], // Empty = Allow All
     printer: {
         type: 'epson',

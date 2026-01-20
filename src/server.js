@@ -71,6 +71,9 @@ const startServer = () => {
                 console.log(`Agente de impresión (HTTPS) corriendo en puerto ${config.port}`);
                 console.log(`Modo: ${config.test_mode ? 'TEST (Archivo)' : 'PRODUCCIÓN (Hardware)'}`);
             });
+
+            checkForUpdate(config.update_url, pkg.version);
+            
         } catch (e) {
             console.error("Error iniciando HTTPS:", e.message);
             startHttp(); // Fallback
