@@ -16,12 +16,15 @@ let printerInstance = null;
 function getPrinter() {
     if (printerInstance) return printerInstance;
 
+    let charSet = config.printer.characterSet;
+    if (charSet === 'PC852') charSet = 'PC852_LATIN2';
+
     try {
         printerInstance = new ThermalPrinter({
             type: config.printer.type === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
             interface: config.test_mode ? 'tcp://0.0.0.0' : config.printer.interface,
             width: config.printer.width,
-            characterSet: config.printer.characterSet,
+            characterSet: charSet,
             removeSpecialCharacters: false
         });
         return printerInstance;
@@ -55,12 +58,14 @@ const normalizePayload = (input) => {
             identification: company.identification || "",
             phone: company.phone || "",
             activity_code: company.activity_code || "",
-            resolution: company.resolution
+            resolution: company.resolution,
+            logo: company.logo || null
         },
         document: {
+            type: rootData.type || "",
             consecutive: rootData.consecutive || "",
             key: rootData.key || "",
-            version: '4.3',
+            version: '4.4',
             created_at: formattedDate,
             observations: ""
         },
@@ -99,10 +104,10 @@ async function printHeader(printer, company) {
 
 
     console.log(company);
-    
+
     if (company.logo) {
         await printer.printImage(Buffer.from(company.logo, 'base64'));
-    }else{
+    } else {
         console.log("Logo no encontrado");
     }
 
@@ -121,7 +126,8 @@ async function printHeader(printer, company) {
 
 function printDocumentInfo(printer, doc) {
     printer.alignLeft();
-    printer.println(`Tiquete electrónico: ${doc.consecutive}`);
+    printer.println(`${doc.type}: `);
+    printer.println(doc.consecutive);
     printer.println(`Versión del documento: ${doc.version || '4.4'}`);
     printer.println(`Fecha: ${doc.created_at}`);
 
@@ -134,7 +140,7 @@ function printDocumentInfo(printer, doc) {
 
 function printItems(printer, items) {
     // Headers
-    printer.tableCustom(TABLE_LAYOUT);
+    printer.tableCustom(TABLE_LAYOUT.map(item => ({ ...item })));
     printSeparator(printer);
 
     // Rows
