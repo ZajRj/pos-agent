@@ -37,21 +37,29 @@ app.use(express.static(path.join(__dirname, 'public')));
 require('./api')(app, { config, execDir, logBuffer, pkg, isPkg });
 
 // --- Auto-Updater Polling ---
+// --- Auto-Updater Polling ---
 const { checkForUpdate, downloadUpdate, installUpdate } = require('./updater');
+
+async function performUpdateCheck() {
+    if (!config.update_url) return;
+    try {
+        console.log(`[Auto-Update] Checking ${config.update_url}...`);
+        const update = await checkForUpdate(config.update_url, pkg.version);
+        if (update.available) {
+            console.log(`[Auto-Update] Found version ${update.version}. Downloading...`);
+            const tempFile = path.join(execDir, 'update.tmp.exe');
+            await downloadUpdate(update.url, tempFile);
+            installUpdate(tempFile);
+        }
+    } catch (e) {
+        console.error("[Auto-Update] Check failed:", e.message);
+    }
+}
 
 // Poll for updates if configured
 if (config.update_url) {
     console.log(`Auto-updater active. Polling ${config.update_url}`);
-    setInterval(async () => {
-        try {
-            const update = await checkForUpdate(config.update_url, pkg.version);
-            if (update.available) {
-                const tempFile = path.join(execDir, 'update.tmp.exe');
-                await downloadUpdate(update.url, tempFile);
-                installUpdate(tempFile);
-            }
-        } catch (e) { /* silent fail */ }
-    }, 1000 * 60 * (60 * 12)); // 12 hours
+    setInterval(performUpdateCheck, 1000 * 60 * 60 * 12); // 12 hours
 }
 
 // Iniciar Servidor (HTTPS con fallback a HTTP)
@@ -72,8 +80,8 @@ const startServer = () => {
                 console.log(`Modo: ${config.test_mode ? 'TEST (Archivo)' : 'PRODUCCIÓN (Hardware)'}`);
             });
 
-            checkForUpdate(config.update_url, pkg.version);
-            
+            performUpdateCheck();
+
         } catch (e) {
             console.error("Error iniciando HTTPS:", e.message);
             startHttp(); // Fallback

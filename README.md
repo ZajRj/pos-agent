@@ -70,8 +70,11 @@ To build the project from source:
 2. **Build the installer:**
    ```bash
    npm run build
-   ```
    The output installer will be located in the `dist/` directory.
+
+## OS support
+
+As of release 1.0.6, the agent is only compatible with Windows, future releases aim to support Linux and macOS.
 
 ## Uninstalling
 

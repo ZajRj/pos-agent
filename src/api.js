@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { printTicket, printGeneric } = require('./printing');
+const { printTicket, printGeneric, printCashRegisterReport, openCashRegister } = require('./printing');
 const { createShortcut, removeShortcut, getStartupPath } = require('./utils/shortcuts');
 const { checkForUpdate, downloadUpdate, installUpdate } = require('./updater');
 
@@ -47,6 +47,29 @@ module.exports = (app, ctx) => {
         try {
             await printGeneric(data);
             res.json({ status: 'ok', msg: 'Generic print success' });
+        } catch (error) {
+            console.error("Error:", error.message);
+            res.status(500).json({ status: 'error', msg: error.message });
+        }
+    });
+
+    app.post('/print/cash-register-report', async (req, res) => {
+        const data = req.body;
+        console.log(`[${new Date().toLocaleTimeString()}] Nueva orden recibida`);
+
+        try {
+            await printCashRegisterReport(data);
+            res.json({ status: 'ok', msg: 'Cash register report printed successfully' });
+        } catch (error) {
+            console.error("Error:", error.message);
+            res.status(500).json({ status: 'error', msg: error.message });
+        }
+    });
+
+    app.get('/printer/open', async (req, res) => {
+        try {
+            await openCashRegister();
+            res.json({ status: 'ok', msg: 'Cash register opened successfully' });
         } catch (error) {
             console.error("Error:", error.message);
             res.status(500).json({ status: 'error', msg: error.message });
