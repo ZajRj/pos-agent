@@ -97,8 +97,13 @@ function printSeparator(printer) {
 
 async function printHeader(printer, company) {
 
+
+    console.log(company);
+    
     if (company.logo) {
         await printer.printImage(Buffer.from(company.logo, 'base64'));
+    }else{
+        console.log("Logo no encontrado");
     }
 
     printer.newLine();

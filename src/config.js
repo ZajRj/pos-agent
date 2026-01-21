@@ -10,7 +10,6 @@ const defaults = {
         type: 'epson',
         interface: 'printer:POS-58',
         width: 48,
-        characterSet: 'PC852_LATIN2',
         removeSpecialCharacters: false,
         options: {
             timeout: 5000
