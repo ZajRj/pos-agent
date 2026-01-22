@@ -1,5 +1,6 @@
 const path = require('path');
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
+const { Jimp } = require('jimp');
 const fs = require('fs');
 const config = require('./config');
 
@@ -17,6 +18,7 @@ const TABLE_LAYOUT = [
 
 
 let printerInstance = null;
+let printingLock = Promise.resolve();
 
 function getPrinter() {
     if (printerInstance) return printerInstance;
@@ -107,13 +109,32 @@ function printSeparator(printer) {
 
 async function printHeader(printer, company) {
     if (company.logo) {
-        const logoPath = path.join(execDir, 'logo_temp.png');
+        const logoPath = path.join(execDir, `logo_${Date.now()}.png`);
         try {
-            fs.writeFileSync(logoPath, Buffer.from(company.logo, 'base64'));
+            const buffer = Buffer.from(company.logo, 'base64');
+            const image = await Jimp.read(buffer);
+
+            // Resizing logic: 
+            // Thermal printers (58mm) have ~384px usable width. 
+            // We'll target 250px-300px for a good fit and buffer safety.
+            const targetWidth = 280;
+            if (image.bitmap.width > targetWidth) {
+                image.resize(targetWidth, Jimp.AUTO);
+            }
+
+            await image.writeAsync(logoPath);
             await printer.printImage(logoPath);
-            fs.unlinkSync(logoPath);
+
+            // Clean up
+            if (fs.existsSync(logoPath)) {
+                fs.unlinkSync(logoPath);
+            }
         } catch (e) {
-            console.error("Error printing logo:", e.message);
+            console.error("Error processing/printing logo:", e.message);
+            // Ensure cleanup on error
+            if (fs.existsSync(logoPath)) {
+                fs.unlinkSync(logoPath);
+            }
         }
     }
 
@@ -216,292 +237,312 @@ function printFooter(printer, data) {
 // --- Main Orchestrator ---
 
 const printTicket = async (rawData) => {
-    const data = normalizePayload(rawData);
+    return (printingLock = printingLock.then(async () => {
+        const data = normalizePayload(rawData);
 
-    let printer;
-    try {
-        printer = getPrinter();
-    } catch (e) {
-        console.error("Critical: Printer initialization failed.", e);
-        throw new Error("Printer initialization failed: " + e.message);
-    }
-
-    printer.clear();
-
-    await printHeader(printer, data.company);
-    printDocumentInfo(printer, data.document);
-    printItems(printer, data.items);
-    printTotals(printer, data.totals, data.items ? data.items.length : 0);
-    printFooter(printer, data);
-
-    printer.cut();
-    if (!config.test_mode) {
-        printer.beep();
-    }
-
-    if (config.test_mode) {
-        const buffer = printer.getBuffer();
-        fs.writeFileSync('ticket_simulado.bin', buffer);
-        console.log("Ticket guardado en ticket_simulado.bin");
-    } else {
+        let printer;
         try {
-            await printer.execute();
-            console.log("Impresión enviada correctamente.");
+            printer = getPrinter();
         } catch (e) {
-            console.error("Error al enviar impresión:", e.message);
-            console.error("Verifique que la impresora esté encendida y conectada.");
-            throw new Error(`Printer Error: ${e.message}`);
+            console.error("Critical: Printer initialization failed.", e);
+            throw new Error("Printer initialization failed: " + e.message);
         }
-    }
+
+        printer.clear();
+
+        await printHeader(printer, data.company);
+        printDocumentInfo(printer, data.document);
+        printItems(printer, data.items);
+        printTotals(printer, data.totals, data.items ? data.items.length : 0);
+        printFooter(printer, data);
+
+        printer.cut();
+        if (!config.test_mode) {
+            printer.beep();
+        }
+
+        if (config.test_mode) {
+            const buffer = printer.getBuffer();
+            fs.writeFileSync('ticket_simulado.bin', buffer);
+            console.log("Ticket guardado en ticket_simulado.bin");
+        } else {
+            try {
+                await printer.execute();
+                console.log("Impresión enviada correctamente.");
+            } catch (e) {
+                console.error("Error al enviar impresión:", e.message);
+                console.error("Verifique que la impresora esté encendida y conectada.");
+                throw new Error(`Printer Error: ${e.message}`);
+            }
+        }
+        printer.clear();
+    }).catch(e => {
+        console.error("Print job failed in queue:", e);
+    }));
 };
 
 const printCashRegisterReport = async (data) => {
-    let printer;
-    try {
-        printer = getPrinter();
-    } catch (e) {
-        console.error("Critical: Printer initialization failed.", e);
-        throw new Error("Printer initialization failed: " + e.message);
-    }
-
-    printer.clear();
-
-    const currency = data.symbol || "USD";
-    const formatDate = (dateStr) => {
+    return (printingLock = printingLock.then(async () => {
+        let printer;
         try {
-            const date = new Date(dateStr);
-            if (isNaN(date.getTime())) return dateStr;
-            return date.toLocaleString('es-CR', { hour12: true });
-        } catch (e) { return dateStr; }
-    };
+            printer = getPrinter();
+        } catch (e) {
+            console.error("Critical: Printer initialization failed.", e);
+            throw new Error("Printer initialization failed: " + e.message);
+        }
 
-    const formatAmount = (amount) => {
-        return `${currency} ${parseFloat(amount || 0).toFixed(2)}`;
-    };
+        printer.clear();
 
-    // --- Header ---
-    printer.alignCenter();
-    printer.bold(true);
-    printer.println(data.company.commercial_name || data.company.name || "Company");
-    printer.bold(false);
-    printer.println(`CED: ${data.company.identification} Tel: ${data.company.phone}`);
-    printer.println(data.transaction.cash_register_name || "Caja");
-    printer.newLine();
+        const currency = data.symbol || "USD";
+        const formatDate = (dateStr) => {
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return dateStr;
+                return date.toLocaleString('es-CR', { hour12: true });
+            } catch (e) { return dateStr; }
+        };
 
-    printer.bold(true);
-    printer.println("REPORTE DE CAJA");
-    printer.bold(false);
-    printer.newLine();
+        const formatAmount = (amount) => {
+            return `${currency} ${parseFloat(amount || 0).toFixed(2)}`;
+        };
 
-    printer.alignLeft();
-    printer.println(`Usuario: ${data.transaction.user_name || data.transaction.user_id}`);
-    printer.println(`Apertura: ${formatDate(data.transaction.open_at)}`);
-    printer.println(`Cierre: ${formatDate(data.transaction.close_at || data.transaction.updated_at)}`);
+        // --- Header ---
+        printer.alignCenter();
+        printer.bold(true);
+        printer.println(data.company.commercial_name || data.company.name || "Company");
+        printer.bold(false);
+        printer.println(`CED: ${data.company.identification} Tel: ${data.company.phone}`);
+        printer.println(data.transaction.cash_register_name || "Caja");
+        printer.newLine();
 
-    printSeparator(printer);
+        printer.bold(true);
+        printer.println("REPORTE DE CAJA");
+        printer.bold(false);
+        printer.newLine();
 
-    // --- RESUMEN ---
-    printer.alignCenter();
-    printer.bold(true);
-    printer.println("RESUMEN");
-    printer.bold(false);
-    printer.alignLeft();
+        printer.alignLeft();
+        printer.println(`Usuario: ${data.transaction.user_name || data.transaction.user_id}`);
+        printer.println(`Apertura: ${formatDate(data.transaction.open_at)}`);
+        printer.println(`Cierre: ${formatDate(data.transaction.close_at || data.transaction.updated_at)}`);
 
-    const printSummaryRow = (label, amount) => {
-        printer.tableCustom([
-            { text: label, align: "LEFT", width: 0.60 },
-            { text: formatAmount(amount), align: "RIGHT", width: 0.40 }
-        ]);
-    };
+        printSeparator(printer);
 
-    printSummaryRow("Monto Apertura", data.transaction.open_amount);
-    printSummaryRow("Ventas (Ingresos)", data.calculated_sales);
-    printSummaryRow("Salidas (Gastos)", data.transaction.expenses);
-    printSummaryRow("Devoluciones", data.transaction.returns);
+        // --- RESUMEN ---
+        printer.alignCenter();
+        printer.bold(true);
+        printer.println("RESUMEN");
+        printer.bold(false);
+        printer.alignLeft();
 
-    printer.newLine();
-
-    const totalCalculated = (parseFloat(data.transaction.open_amount) || 0) +
-        (parseFloat(data.calculated_sales) || 0) -
-        (parseFloat(data.transaction.expenses) || 0) -
-        (parseFloat(data.transaction.returns) || 0);
-
-    printSeparator(printer);
-    printer.bold(true);
-    printSummaryRow("Total en Caja (Calculado)", totalCalculated);
-
-    // Use close_amount from payload
-    printSummaryRow("Monto Cierre (Declarado)", data.transaction.close_amount);
-    printer.bold(false);
-
-    const difference = (parseFloat(data.transaction.close_amount) || 0) - totalCalculated;
-
-    printSeparator(printer);
-    printer.bold(true);
-    printSummaryRow("Diferencia", difference);
-    printer.bold(false);
-    printSeparator(printer);
-
-    // --- METODOS DE PAGO ---
-    printer.alignCenter();
-    printer.bold(true);
-    printer.println("METODOS DE PAGO (Ventas)");
-    printer.bold(false);
-    printer.alignLeft();
-
-    if (data.payment_methods) {
-        Object.entries(data.payment_methods).forEach(([method, amount]) => {
+        const printSummaryRow = (label, amount) => {
             printer.tableCustom([
-                { text: method, align: "LEFT", width: 0.60 },
+                { text: label, align: "LEFT", width: 0.60 },
                 { text: formatAmount(amount), align: "RIGHT", width: 0.40 }
             ]);
-        });
-    }
+        };
 
-    printSeparator(printer);
-    printer.bold(true);
-    printer.tableCustom([
-        { text: "Total Ventas", align: "LEFT", width: 0.60, bold: true },
-        { text: formatAmount(data.calculated_sales), align: "RIGHT", width: 0.40, bold: true }
-    ]);
-    printer.bold(false);
-    printSeparator(printer);
+        printSummaryRow("Monto Apertura", data.transaction.open_amount);
+        printSummaryRow("Ventas (Ingresos)", data.calculated_sales);
+        printSummaryRow("Salidas (Gastos)", data.transaction.expenses);
+        printSummaryRow("Devoluciones", data.transaction.returns);
 
-    // --- DETALLE MOVIMIENTOS ---
-    printer.alignCenter();
-    printer.bold(true);
-    printer.println("DETALLE MOVIMIENTOS");
-    printer.bold(false);
+        printer.newLine();
 
-    // Table Header
-    printer.tableCustom([
-        { text: "#", align: "LEFT", width: 0.50, bold: true },
-        { text: "Tipo", align: "LEFT", width: 0.20, bold: true },
-        { text: "Monto", align: "RIGHT", width: 0.30, bold: true }
-    ]);
-    printSeparator(printer);
+        const totalCalculated = (parseFloat(data.transaction.open_amount) || 0) +
+            (parseFloat(data.calculated_sales) || 0) -
+            (parseFloat(data.transaction.expenses) || 0) -
+            (parseFloat(data.transaction.returns) || 0);
 
-    if (data.docs) {
-        data.docs.forEach(doc => {
-            printer.tableCustom([
-                { text: doc.consecutive, align: "LEFT", width: 0.50 },
-                { text: doc.type, align: "LEFT", width: 0.20 },
-                { text: formatAmount(doc.total), align: "RIGHT", width: 0.30 }
-            ]);
-            // Date row
-            printer.tableCustom([
-                { text: "", align: "LEFT", width: 0.50 },
-                { text: formatDate(doc.created_at), align: "LEFT", width: 0.50 }
-            ]);
-            printer.newLine();
-        });
-    }
-    printSeparator(printer);
+        printSeparator(printer);
+        printer.bold(true);
+        printSummaryRow("Total en Caja (Calculado)", totalCalculated);
 
-    // --- Signatures ---
-    printer.newLine();
-    printer.newLine();
-    printer.println("_".repeat(LINE_WIDTH));
-    printer.alignCenter();
-    printer.println("Firma Cajero");
+        // Use close_amount from payload
+        printSummaryRow("Monto Cierre (Declarado)", data.transaction.close_amount);
+        printer.bold(false);
 
-    printer.newLine();
-    printer.newLine();
-    printer.println("_".repeat(LINE_WIDTH));
-    printer.alignCenter();
-    printer.println("Firma Supervisor");
-    printer.newLine();
+        const difference = (parseFloat(data.transaction.close_amount) || 0) - totalCalculated;
 
-    // Payload has generated_at
-    printer.alignCenter();
-    printer.println(`Generado: ${data.generated_at}`);
-    printer.newLine();
+        printSeparator(printer);
+        printer.bold(true);
+        printSummaryRow("Diferencia", difference);
+        printer.bold(false);
+        printSeparator(printer);
 
-    printer.cut();
+        // --- METODOS DE PAGO ---
+        printer.alignCenter();
+        printer.bold(true);
+        printer.println("METODOS DE PAGO (Ventas)");
+        printer.bold(false);
+        printer.alignLeft();
 
-    if (!config.test_mode) {
-        printer.beep();
-    }
-
-    if (config.test_mode) {
-        const buffer = printer.getBuffer();
-        fs.writeFileSync('cash_register_report_simulado.bin', buffer);
-        console.log("Cash register report saved in cash_register_report_simulado.bin");
-    } else {
-        try {
-            await printer.execute();
-            console.log("Cash register report sent successfully.");
-        } catch (e) {
-            console.error("Error sending cash register report:", e.message);
-            console.error("Please verify that the printer is turned on and connected.");
-            throw new Error(`Printer Error: ${e.message}`);
+        if (data.payment_methods) {
+            Object.entries(data.payment_methods).forEach(([method, amount]) => {
+                printer.tableCustom([
+                    { text: method, align: "LEFT", width: 0.60 },
+                    { text: formatAmount(amount), align: "RIGHT", width: 0.40 }
+                ]);
+            });
         }
-    }
+
+        printSeparator(printer);
+        printer.bold(true);
+        printer.tableCustom([
+            { text: "Total Ventas", align: "LEFT", width: 0.60, bold: true },
+            { text: formatAmount(data.calculated_sales), align: "RIGHT", width: 0.40, bold: true }
+        ]);
+        printer.bold(false);
+        printSeparator(printer);
+
+        // --- DETALLE MOVIMIENTOS ---
+        printer.alignCenter();
+        printer.bold(true);
+        printer.println("DETALLE MOVIMIENTOS");
+        printer.bold(false);
+
+        // Table Header
+        printer.tableCustom([
+            { text: "#", align: "LEFT", width: 0.50, bold: true },
+            { text: "Tipo", align: "LEFT", width: 0.20, bold: true },
+            { text: "Monto", align: "RIGHT", width: 0.30, bold: true }
+        ]);
+        printSeparator(printer);
+
+        if (data.docs) {
+            data.docs.forEach(doc => {
+                printer.tableCustom([
+                    { text: doc.consecutive, align: "LEFT", width: 0.50 },
+                    { text: doc.type, align: "LEFT", width: 0.20 },
+                    { text: formatAmount(doc.total), align: "RIGHT", width: 0.30 }
+                ]);
+                // Date row
+                printer.tableCustom([
+                    { text: "", align: "LEFT", width: 0.50 },
+                    { text: formatDate(doc.created_at), align: "LEFT", width: 0.50 }
+                ]);
+                printer.newLine();
+            });
+        }
+        printSeparator(printer);
+
+        // --- Signatures ---
+        printer.newLine();
+        printer.newLine();
+        printer.println("_".repeat(LINE_WIDTH));
+        printer.alignCenter();
+        printer.println("Firma Cajero");
+
+        printer.newLine();
+        printer.newLine();
+        printer.println("_".repeat(LINE_WIDTH));
+        printer.alignCenter();
+        printer.println("Firma Supervisor");
+        printer.newLine();
+
+        // Payload has generated_at
+        printer.alignCenter();
+        printer.println(`Generado: ${data.generated_at}`);
+        printer.newLine();
+
+        printer.cut();
+
+        if (!config.test_mode) {
+            printer.beep();
+        }
+
+        if (config.test_mode) {
+            const buffer = printer.getBuffer();
+            fs.writeFileSync('cash_register_report_simulado.bin', buffer);
+            console.log("Cash register report saved in cash_register_report_simulado.bin");
+        } else {
+            try {
+                await printer.execute();
+                console.log("Cash register report sent successfully.");
+            } catch (e) {
+                console.error("Error sending cash register report:", e.message);
+                console.error("Please verify that the printer is turned on and connected.");
+                throw new Error(`Printer Error: ${e.message}`);
+            }
+        }
+        printer.clear();
+    }).catch(e => {
+        console.error("Cash register report failed in queue:", e);
+    }));
 };
 
 const printGeneric = async (data) => {
-    let printer;
-    try {
-        printer = getPrinter();
-    } catch (e) {
-        console.error("Critical: Printer initialization failed.", e);
-        throw new Error("Printer initialization failed: " + e.message);
-    }
-
-    printer.clear();
-
-    //expected json {lines: ["line1", "line2"]}
-    data.lines.forEach(line => {
-        printer.println(line);
-    });
-
-    printer.newLine();
-
-    printer.cut();
-
-    if (!config.test_mode) {
-        printer.beep();
-    }
-
-    if (config.test_mode) {
-        const buffer = printer.getBuffer();
-        fs.writeFileSync('ticket_simulado.bin', buffer);
-        console.log("Ticket guardado en ticket_simulado.bin");
-    } else {
+    return (printingLock = printingLock.then(async () => {
+        let printer;
         try {
-            await printer.execute();
-            console.log("Impresión enviada correctamente.");
+            printer = getPrinter();
         } catch (e) {
-            console.error("Error al enviar impresión:", e.message);
-            console.error("Verifique que la impresora esté encendida y conectada.");
-            throw new Error(`Printer Error: ${e.message}`);
+            console.error("Critical: Printer initialization failed.", e);
+            throw new Error("Printer initialization failed: " + e.message);
         }
-    }
+
+        printer.clear();
+
+        //expected json {lines: ["line1", "line2"]}
+        if (data.lines && Array.isArray(data.lines)) {
+            data.lines.forEach(line => {
+                printer.println(line);
+            });
+        }
+
+        printer.newLine();
+        printer.cut();
+
+        if (!config.test_mode) {
+            printer.beep();
+        }
+
+        if (config.test_mode) {
+            const buffer = printer.getBuffer();
+            fs.writeFileSync('ticket_simulado.bin', buffer);
+            console.log("Ticket guardado en ticket_simulado.bin");
+        } else {
+            try {
+                await printer.execute();
+                console.log("Impresión enviada correctamente.");
+            } catch (e) {
+                console.error("Error al enviar impresión:", e.message);
+                console.error("Verifique que la impresora esté encendida y conectada.");
+                throw new Error(`Printer Error: ${e.message}`);
+            }
+        }
+        printer.clear();
+    }).catch(e => {
+        console.error("Generic print failed in queue:", e);
+    }));
 };
 
 const openCashRegister = async () => {
-    let printer;
-    try {
-        printer = getPrinter();
-    } catch (e) {
-        console.error("Critical: Printer initialization failed.", e);
-        throw new Error("Printer initialization failed: " + e.message);
-    }
-
-    printer.clear();
-
-    if (config.test_mode) {
-        console.log("Cash register open sent successfully.");
-    } else {
+    return (printingLock = printingLock.then(async () => {
+        let printer;
         try {
-            printer.openCashDrawer();
-            console.log("Cash register open sent successfully.");
+            printer = getPrinter();
         } catch (e) {
-            console.error("Error sending cash register open:", e.message);
-            console.error("Please verify that the printer is turned on and connected or verify physical connection.");
-            throw new Error(`Printer Error: ${e.message}`);
+            console.error("Critical: Printer initialization failed.", e);
+            throw new Error("Printer initialization failed: " + e.message);
         }
-    }
+
+        printer.clear();
+
+        if (config.test_mode) {
+            console.log("Cash register open sent successfully.");
+        } else {
+            try {
+                printer.openCashDrawer();
+                console.log("Cash register open sent successfully.");
+            } catch (e) {
+                console.error("Error sending cash register open:", e.message);
+                console.error("Please verify that the printer is turned on and connected or verify physical connection.");
+                throw new Error(`Printer Error: ${e.message}`);
+            }
+        }
+    }).catch(e => {
+        console.error("Open cash drawer failed in queue:", e);
+    }));
 };
 
 module.exports = { printTicket, printCashRegisterReport, printGeneric, openCashRegister };
