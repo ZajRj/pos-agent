@@ -3,6 +3,8 @@ const path = require('path');
 
 const logBuffer = [];
 const MAX_LOGS = 500;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+let logCount = 0;
 let debugLogPath;
 let crashLogPath;
 
@@ -30,7 +32,19 @@ function captureLog(type, args) {
 
     // 3. Persistent File Log
     if (debugLogPath) {
+        logCount++;
         try {
+            // Check size every 100 entries
+            if (logCount % 100 === 0) {
+                if (fs.existsSync(debugLogPath)) {
+                    const stats = fs.statSync(debugLogPath);
+                    if (stats.size > MAX_FILE_SIZE) {
+                        const oldLogPath = debugLogPath + '.old';
+                        if (fs.existsSync(oldLogPath)) fs.unlinkSync(oldLogPath);
+                        fs.renameSync(debugLogPath, oldLogPath);
+                    }
+                }
+            }
             fs.appendFileSync(debugLogPath, entry + '\n');
         } catch (e) {
             // Fail silently

@@ -38,23 +38,56 @@ Visit `https://localhost:3000/` in your browser to view the status dashboard and
 
 ### API Endpoints
 
-**POST** `/imprimir`
-Sends a print job to the configured printer.
+**POST** `/print`
+Unified endpoint that accepts an array of printing commands.
+
+**GET** `/printer/open`
+Triggers the cash drawer opening command.
+
+### Instruction Set (Agnostic API)
+
+The `/print` endpoint accepts a JSON array of commands. This allows any application to build custom layouts without modifying the agent source code.
+
+| Command | Properties | Description |
+| :--- | :--- | :--- |
+| `text` | `value`, `align`, `bold`, `underline` | Prints a line of text. |
+| `table` | `rows`, `columns` | Prints a structured table. `columns` define widths (0.0 to 1.0). |
+| `image` | `data` (base64), `align` | Prints an optimized high-contrast dithered image. |
+| `barcode`| `value`, `mode` | Prints standard barcodes (CODE128, EAN13, etc). |
+| `qrcode` | `value` | Prints a QR code. |
+| `separator`| - | Prints a horizontal separator line. |
+| `newLine` | - | Adds vertical spacing. |
+| `cut` | - | Performs a paper cut. |
+| `beep` | - | Triggers the printer's internal buzzer. |
+| `raw` | `data` (int array) | Sends raw ESC/POS bytes to the hardware. |
+
+#### Example Payload
+```json
+[
+  { "type": "text", "value": "SABOR ARTESANAL", "align": "center", "bold": true },
+  { "type": "separator" },
+  { "type": "table", 
+    "columns": [{ "width": 0.5 }, { "width": 0.5, "align": "RIGHT" }], 
+    "rows": [["Producto", "Precio"], ["Helado", "1500.00"]] 
+  },
+  { "type": "cut" }
+]
+```
 
 ## Configuration
 
-A `config.json` file is located in `%LOCALAPPDATA%\POSAgent\config.json`. You can modify it to change the listening port or default printer settings.
+A `config.json` file is located in the installation directory. You can also modify settings via the Dashboard UI.
 
 ```json
 {
   "port": 3000,
   "printer": {
     "type": "epson",
-    "interface": "printer:EPSON TM-T20II Receipt", 
-    "width": 48,
+    "interface": "printer:POS-58", 
+    "width": 32,
     "characterSet": "PC852_LATIN2"
   },
-  "test_mode": true
+  "test_mode": false
 }
 ```
 
@@ -74,7 +107,7 @@ To build the project from source:
 
 ## OS support
 
-As of release 1.0.6, the agent is only compatible with Windows, future releases aim to support Linux and macOS.
+As of release 1.0.15, the agent is only compatible with Windows, future releases aim to support Linux and macOS.
 
 ## Uninstalling
 

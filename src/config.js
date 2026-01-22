@@ -9,7 +9,7 @@ const defaults = {
     printer: {
         type: 'epson',
         interface: 'printer:POS-58',
-        width: 28,
+        width: 32,
         removeSpecialCharacters: false,
         options: {
             timeout: 5000

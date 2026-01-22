@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { printTicket, printGeneric, printCashRegisterReport, openCashRegister } = require('./printing');
+const { executePrintJob, openCashRegister } = require('./printing');
 const { createShortcut, removeShortcut, getStartupPath } = require('./utils/shortcuts');
 const { checkForUpdate, downloadUpdate, installUpdate } = require('./updater');
 
@@ -27,39 +27,20 @@ module.exports = (app, ctx) => {
         res.json(logBuffer);
     });
 
-    // Print Endpoint
-    app.post('/imprimir', async (req, res) => {
-        const data = req.body;
-        console.log(`[${new Date().toLocaleTimeString()}] Nueva orden recibida`);
-
-        try {
-            await printTicket(data);
-            res.json({ status: 'ok', msg: 'Ticket procesado' });
-        } catch (error) {
-            console.error("Error:", error.message);
-            res.status(500).json({ status: 'error', msg: error.message });
-        }
-    });
-    app.post('/print/generic', async (req, res) => {
-        const data = req.body;
-        console.log(`[${new Date().toLocaleTimeString()}] Nueva orden recibida`);
-
-        try {
-            await printGeneric(data);
-            res.json({ status: 'ok', msg: 'Generic print success' });
-        } catch (error) {
-            console.error("Error:", error.message);
-            res.status(500).json({ status: 'error', msg: error.message });
-        }
+    // Last Job Endpoint (for Preview)
+    app.get('/api/last-job', (req, res) => {
+        const { getLastJob } = require('./printing');
+        res.json({ status: 'ok', commands: getLastJob() });
     });
 
-    app.post('/print/cash-register-report', async (req, res) => {
-        const data = req.body;
-        console.log(`[${new Date().toLocaleTimeString()}] Nueva orden recibida`);
+    // Unified Agnostic Print Endpoint
+    app.post(['/imprimir', '/print'], async (req, res) => {
+        const payload = req.body;
+        console.log(`[${new Date().toLocaleTimeString()}] Nueva solicitud de impresión`);
 
         try {
-            await printCashRegisterReport(data);
-            res.json({ status: 'ok', msg: 'Cash register report printed successfully' });
+            await executePrintJob(payload);
+            res.json({ status: 'ok', msg: 'Trabajo de impresión procesado' });
         } catch (error) {
             console.error("Error:", error.message);
             res.status(500).json({ status: 'error', msg: error.message });
