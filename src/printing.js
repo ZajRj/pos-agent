@@ -1,6 +1,11 @@
+const path = require('path');
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
 const fs = require('fs');
 const config = require('./config');
+
+// --- Environment ---
+const isPkg = typeof process.pkg !== 'undefined';
+const execDir = isPkg ? path.dirname(process.execPath) : __dirname;
 
 // --- Configuration ---
 const LINE_WIDTH = config.printer.width || 32; // Default to 32 for POS-58
@@ -101,14 +106,15 @@ function printSeparator(printer) {
 }
 
 async function printHeader(printer, company) {
-
-
-    console.log(company);
-
     if (company.logo) {
-        await printer.printImage(Buffer.from(company.logo, 'base64'));
-    } else {
-        console.log("Logo no encontrado");
+        const logoPath = path.join(execDir, 'logo_temp.png');
+        try {
+            fs.writeFileSync(logoPath, Buffer.from(company.logo, 'base64'));
+            await printer.printImage(logoPath);
+            fs.unlinkSync(logoPath);
+        } catch (e) {
+            console.error("Error printing logo:", e.message);
+        }
     }
 
     printer.newLine();
@@ -222,7 +228,7 @@ const printTicket = async (rawData) => {
 
     printer.clear();
 
-    printHeader(printer, data.company);
+    await printHeader(printer, data.company);
     printDocumentInfo(printer, data.document);
     printItems(printer, data.items);
     printTotals(printer, data.totals, data.items ? data.items.length : 0);
