@@ -9,7 +9,7 @@ const isPkg = typeof process.pkg !== 'undefined';
 const execDir = isPkg ? path.dirname(process.execPath) : __dirname;
 
 // --- Configuration ---
-const LINE_WIDTH = config.printer.width || 28; // Safer default for POS-58
+const LINE_WIDTH = (config.printer.width - 2) || 28; // Safer default for POS-58
 const TABLE_LAYOUT = [
     { text: "CAN", align: "LEFT", width: 0.15, bold: true },
     { text: "PRECIO", align: "RIGHT", width: 0.42, bold: true },
