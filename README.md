@@ -107,7 +107,7 @@ To build the project from source:
 
 ## OS support
 
-As of release 1.0.15, the agent is only compatible with Windows, future releases aim to support Linux and macOS.
+As of release 1.0.15, bundled installer is only compatible with Windows, future releases aim to support Linux and macOS.
 
 ## Uninstalling
 
