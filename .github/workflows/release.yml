@@ -35,6 +35,7 @@ jobs:
         files: |
           dist/POSAgent-Setup.exe
           payload/pos-agent.exe
+          dist/pos-agent-linux.tar.gz
         draft: false
         prerelease: false
         generate_release_notes: true

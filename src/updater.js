@@ -132,13 +132,19 @@ function installUpdate(updateFile) {
     // 3. Move new exe to current name
     // 4. Start current exe
     // 5. Delete self (bat)
-    const script = 
-    `
+    const script =
+        `
         @echo off
-        timeout /t 5 /nobreak > NUL
+        (
+        echo [UPDATE] Waiting for process to exit...
+        timeout /t 5 /nobreak
+        echo [UPDATE] Deleting old executable...
         del "${appExe}"
-        move "${updateExe}" "${appExe}"
+        echo [UPDATE] Moving new executable...
+        move /Y "${updateExe}" "${appExe}"
+        echo [UPDATE] Launching new executable...
         start "" /D "${execDir}" "${appExe}"
+        ) > update.log 2>&1
         del "%~f0"
     `;
 

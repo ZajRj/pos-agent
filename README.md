@@ -107,8 +107,8 @@ To build the project from source:
 
 ## OS support
 
-As of release 1.0.15, bundled installer is only compatible with Windows, future releases aim to support Linux and macOS.
-
+As of release 2.0.0, bundled installer is only compatible with Windows and Linux (untested), future releases aim to support macOS.
+ 
 ## Uninstalling
 
 Run the **Uninstall POS Agent** shortcut from your Desktop or run `uninstall.exe` from the installation directory.

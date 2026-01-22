@@ -63,11 +63,45 @@ function buildSetup() {
     });
 }
 
+function buildLinux() {
+    console.log("Building Linux Binary...");
+
+    // 1. Build Linux Binary (linux-x64, linux-arm64)
+    run(`npx pkg . --target node18-linux-x64 --out-path ${PAYLOAD_DIR} --compress GZip`);
+
+    // Rename output
+    if (fs.existsSync(path.join(PAYLOAD_DIR, 'pos-agent-linux'))) {
+        fs.renameSync(path.join(PAYLOAD_DIR, 'pos-agent-linux'), path.join(PAYLOAD_DIR, 'pos-agent'));
+    }
+
+    // 2. Prepare Linux artifacts
+    const linuxDistDir = path.join(DIST_DIR, 'linux-x64');
+    if (!fs.existsSync(linuxDistDir)) fs.mkdirSync(linuxDistDir);
+
+    fs.copyFileSync(path.join(PAYLOAD_DIR, 'pos-agent'), path.join(linuxDistDir, 'pos-agent'));
+    fs.copyFileSync(path.join(__dirname, 'src/installer/install.sh'), path.join(linuxDistDir, 'install.sh'));
+    fs.copyFileSync(path.join(__dirname, 'src/config.json'), path.join(linuxDistDir, 'config.json'));
+
+    console.log(`Linux artifacts ready at: ${linuxDistDir}`);
+
+    try {
+        const tarCmd = `tar -czvf "pos-agent-linux.tar.gz" -C "${path.join(DIST_DIR, 'linux-x64')}" .`;
+        run(tarCmd);
+        // Move tar to dist root
+        fs.renameSync(path.join(process.cwd(), 'pos-agent-linux.tar.gz'), path.join(DIST_DIR, 'pos-agent-linux.tar.gz'));
+        console.log(`Packet created: ${path.join(DIST_DIR, 'pos-agent-linux.tar.gz')}`);
+    } catch (e) {
+        console.warn("Could not create tarball automatically (tar might not be in PATH).", e.message);
+        console.log("To package manually: tar -czvf pos-agent-linux.tar.gz -C dist/linux-x64 .");
+    }
+}
+
 function main() {
     try {
         clean();
         buildCore();
         buildSetup();
+        buildLinux();
         console.log("\nBuild Complete! Installer is at dist/POSAgent-Setup.exe");
     } catch (e) {
         console.error("Build Failed:", e.message);

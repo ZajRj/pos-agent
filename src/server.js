@@ -48,7 +48,8 @@ async function performUpdateCheck() {
         const update = await checkForUpdate(config.update_url, pkg.version);
         if (update.available) {
             console.log(`[Auto-Update] Found version ${update.version}. Downloading...`);
-            const tempFile = path.join(execDir, 'update.tmp.exe');
+            const ext = process.platform === 'win32' ? '.exe' : '';
+            const tempFile = path.join(execDir, `update.tmp${ext}`);
             await downloadUpdate(update.url, tempFile);
             installUpdate(tempFile);
         }

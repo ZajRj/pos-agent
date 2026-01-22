@@ -98,10 +98,15 @@ module.exports = (app, ctx) => {
     // Check Autostart
     app.get('/api/service/autostart', (req, res) => {
         try {
-            const startupPath = getStartupPath();
-            const linkPath = path.join(startupPath, 'POS Agent.lnk');
-            const isEnabled = fs.existsSync(linkPath);
-            res.json({ status: 'ok', enabled: isEnabled });
+            if (process.platform === 'linux') {
+                const { isAutostartEnabled } = require('./utils/linux');
+                res.json({ status: 'ok', enabled: isAutostartEnabled() });
+            } else {
+                const startupPath = getStartupPath();
+                const linkPath = path.join(startupPath, 'POS Agent.lnk');
+                const isEnabled = fs.existsSync(linkPath);
+                res.json({ status: 'ok', enabled: isEnabled });
+            }
         } catch (e) {
             res.status(500).json({ status: 'error', msg: e.message });
         }
@@ -110,23 +115,38 @@ module.exports = (app, ctx) => {
     // Toggle Autostart
     app.post('/api/service/autostart', (req, res) => {
         const { enable } = req.body;
-        const startupPath = getStartupPath();
-        const linkPath = path.join(startupPath, 'POS Agent.lnk');
 
         try {
-            if (enable) {
-                const vbsPath = path.join(execDir, 'launcher.vbs');
-                const targetExe = isPkg ? process.execPath : path.join(execDir, 'pos-agent.exe');
-                const target = fs.existsSync(vbsPath) ? vbsPath : targetExe;
-                const icon = isPkg ? process.execPath : undefined;
-
-                createShortcut(target, linkPath, "Start POS Agent (Background)", icon);
-                console.log("Autostart Enabled.");
-                res.json({ status: 'ok', enabled: true, msg: 'Inicio automático activado' });
+            if (process.platform === 'linux') {
+                const { enableAutostart, disableAutostart, installService } = require('./utils/linux');
+                if (enable) {
+                    // Start by overwriting/refreshing the service file
+                    installService(process.pkg ? process.execPath : process.argv[1]);
+                    enableAutostart();
+                    res.json({ status: 'ok', enabled: true, msg: 'Linux Systemd service enabled.' });
+                } else {
+                    disableAutostart();
+                    res.json({ status: 'ok', enabled: false, msg: 'Linux Systemd service disabled.' });
+                }
             } else {
-                removeShortcut(linkPath);
-                console.log("Autostart Disabled.");
-                res.json({ status: 'ok', enabled: false, msg: 'Inicio automático desactivado' });
+                // Windows Logic
+                const startupPath = getStartupPath();
+                const linkPath = path.join(startupPath, 'POS Agent.lnk');
+
+                if (enable) {
+                    const vbsPath = path.join(execDir, 'launcher.vbs');
+                    const targetExe = isPkg ? process.execPath : path.join(execDir, 'pos-agent.exe');
+                    const target = fs.existsSync(vbsPath) ? vbsPath : targetExe;
+                    const icon = isPkg ? process.execPath : undefined;
+
+                    createShortcut(target, linkPath, "Start POS Agent (Background)", icon);
+                    console.log("Autostart Enabled.");
+                    res.json({ status: 'ok', enabled: true, msg: 'Inicio automático activado' });
+                } else {
+                    removeShortcut(linkPath);
+                    console.log("Autostart Disabled.");
+                    res.json({ status: 'ok', enabled: false, msg: 'Inicio automático desactivado' });
+                }
             }
         } catch (e) {
             console.error("Autostart toggle error:", e);
