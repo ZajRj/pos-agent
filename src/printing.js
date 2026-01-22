@@ -1,6 +1,6 @@
 const path = require('path');
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
-const { Jimp } = require('jimp');
+const Jimp = require('jimp');
 const fs = require('fs');
 const config = require('./config');
 
