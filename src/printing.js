@@ -123,7 +123,10 @@ async function printHeader(printer, company) {
             }
 
             await image.writeAsync(logoPath);
+            
+            printer.alignCenter();
             await printer.printImage(logoPath);
+            printer.alignLeft();
 
             // Clean up
             if (fs.existsSync(logoPath)) {
