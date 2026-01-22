@@ -9,7 +9,7 @@ const isPkg = typeof process.pkg !== 'undefined';
 const execDir = isPkg ? path.dirname(process.execPath) : __dirname;
 
 // --- Configuration ---
-const LINE_WIDTH = config.printer.width || 32; // Default to 32 for POS-58
+const LINE_WIDTH = config.printer.width || 30; // Conservative default for POS-58
 const TABLE_LAYOUT = [
     { text: "CAN", align: "LEFT", width: 0.20, bold: true },
     { text: "PRECIO", align: "RIGHT", width: 0.40, bold: true },
@@ -59,7 +59,11 @@ const normalizePayload = (input) => {
         }
     } catch (e) { }
 
+    const formatVal = (val) => parseFloat(val || 0).toFixed(2);
+
     return {
+        currency: rootData.currency || "CRC",
+        symbol: rootData.symbol || "₡",
         company: {
             commercial_name: company.name || "N/A",
             identification: company.identification || "",
@@ -83,20 +87,20 @@ const normalizePayload = (input) => {
             return {
                 name: item.name || "Item",
                 quantity: qty,
-                price: price.toFixed(2),
-                total: total.toFixed(2),
+                price: formatVal(price),
+                total: formatVal(total),
                 tax_label: item.tax ? (item.tax.name || "IMP") : "EXENTO"
             };
         }),
         totals: {
-            subtotal: input.subtotal,
-            taxes: input.taxes,
-            total: input.calculated_total || input.total,
-            exento: input.exento,
-            gravado: input.gravado,
-            descuento: input.discounts,
-            iva: input.taxes,
-            vuelto: 0
+            subtotal: formatVal(input.subtotal),
+            taxes: formatVal(input.taxes),
+            total: formatVal(input.calculated_total || input.total),
+            exento: formatVal(input.exento),
+            gravado: formatVal(input.gravado),
+            descuento: formatVal(input.discounts),
+            iva: formatVal(input.taxes),
+            vuelto: formatVal(0)
         }
     };
 };
@@ -123,7 +127,7 @@ async function printHeader(printer, company) {
             }
 
             await image.writeAsync(logoPath);
-            
+
             printer.alignCenter();
             await printer.printImage(logoPath);
             printer.alignLeft();
@@ -168,7 +172,7 @@ function printDocumentInfo(printer, doc) {
     printSeparator(printer);
 }
 
-function printItems(printer, items) {
+function printItems(printer, items, currency) {
     // Headers
     printer.tableCustom(TABLE_LAYOUT.map(item => ({ ...item })));
     printSeparator(printer);
@@ -185,32 +189,31 @@ function printItems(printer, items) {
             // 2. Details (using same width distribution as headers for alignment)
             printer.tableCustom([
                 { text: item.quantity.toString(), align: "LEFT", width: TABLE_LAYOUT[0].width },
-                { text: item.price, align: "RIGHT", width: TABLE_LAYOUT[1].width },
-                { text: item.total, align: "RIGHT", width: TABLE_LAYOUT[2].width }
+                { text: `${currency} ${item.price}`, align: "RIGHT", width: TABLE_LAYOUT[1].width },
+                { text: `${currency} ${item.total}`, align: "RIGHT", width: TABLE_LAYOUT[2].width }
             ]);
         });
     }
     printSeparator(printer);
 }
 
-function printTotals(printer, totals, itemCount) {
+function printTotals(printer, totals, itemCount, currency) {
     printer.alignLeft();
-    printer.println(`Numero de Items ${itemCount}.00`);
+    printer.println(`Numero de Items: ${itemCount}`);
 
-    const printLine = (label, value) => printer.println(`${label} ${value}`);
+    const printLine = (label, value) => printer.println(`${label}: ${currency} ${value}`);
 
     if (totals) {
-        if (totals.exento) printLine("EXENTO", totals.exento);
-        if (totals.gravado) printLine("GRAVADO", totals.gravado);
-        if (totals.descuento) printLine("DESCUENTO", totals.descuento);
-        if (totals.exonerado) printLine("TOTAL EXONERADO", totals.exonerado);
-        if (totals.iva) printLine("IVA", totals.iva);
+        if (totals.exento && parseFloat(totals.exento) > 0) printLine("EXENTO", totals.exento);
+        if (totals.gravado && parseFloat(totals.gravado) > 0) printLine("GRAVADO", totals.gravado);
+        if (totals.descuento && parseFloat(totals.descuento) > 0) printLine("DESCUENTO", totals.descuento);
+        if (totals.iva && parseFloat(totals.iva) > 0) printLine("IVA", totals.iva);
 
         printer.bold(true);
         printLine("TOTAL COMPROBANTE", totals.total);
         printer.bold(false);
 
-        if (totals.vuelto) {
+        if (totals.vuelto && parseFloat(totals.vuelto) > 0) {
             printer.bold(true);
             printLine("Vuelto", totals.vuelto);
             printer.bold(false);
@@ -252,11 +255,13 @@ const printTicket = async (rawData) => {
         }
 
         printer.clear();
+        // Reset left margin to 0 (GS L 0 0)
+        printer.raw(Buffer.from([0x1d, 0x4c, 0x00, 0x00]));
 
         await printHeader(printer, data.company);
         printDocumentInfo(printer, data.document);
-        printItems(printer, data.items);
-        printTotals(printer, data.totals, data.items ? data.items.length : 0);
+        printItems(printer, data.items, data.symbol);
+        printTotals(printer, data.totals, data.items ? data.items.length : 0, data.symbol);
         printFooter(printer, data);
 
         printer.cut();
@@ -295,6 +300,8 @@ const printCashRegisterReport = async (data) => {
         }
 
         printer.clear();
+        // Reset left margin to 0 (GS L 0 0)
+        printer.raw(Buffer.from([0x1d, 0x4c, 0x00, 0x00]));
 
         const currency = data.symbol || "USD";
         const formatDate = (dateStr) => {
@@ -484,6 +491,8 @@ const printGeneric = async (data) => {
         }
 
         printer.clear();
+        // Reset left margin to 0 (GS L 0 0)
+        printer.raw(Buffer.from([0x1d, 0x4c, 0x00, 0x00]));
 
         //expected json {lines: ["line1", "line2"]}
         if (data.lines && Array.isArray(data.lines)) {
