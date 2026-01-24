@@ -90,6 +90,49 @@ A `config.json` file is located in the installation directory. You can also modi
   "test_mode": false
 }
 ```
+### Printer Setup & Limitations
+
+**Important Limitation:** The agent is packaged as a standalone executable. This prevents it from loading native OS printer drivers dynamically. Therefore, using the direct `printer:PrinterName` interface often fails.
+
+#### Recommended Solution: Shared Printer (Windows)
+The most reliable method is to **share your USB printer** and access it via the network (UNC path), which bypasses driver issues.
+
+1. Go to **Printers & Scanners**.
+2. Select your printer > **Printer properties** > **Sharing** tab.
+3. Check **Share this printer** and give it a short name (e.g., `TM20`).
+4. In the POS Agent config (or Dashboard), set the interface to:
+   ```json
+   "interface": "\\\\localhost\\TM20"
+   ```
+
+#### Linux Setup (Direct Device)
+On Linux, the most reliable "driverless" method is writing directly to the printer's device file.
+1. Identify your printer (process usually involves `ls /dev/usb/` or checking `dmesg`).
+2. Ensure your user has permissions to write to the port (e.g., `sudo usermod -aG lp $USER`).
+3. Set the interface to the absolute path:
+
+   ```json
+   "interface": "/dev/usb/lp0"
+   ```
+
+
+#### Shared Printer (Linux via SMB)
+To access a printer shared by a Windows PC or another Linux machine (SMB/Samba):
+1. Mount the shared printer to a local file path:
+   ```bash
+   sudo mount -t cifs //ServerName/PrinterName /mnt/my_printer -o user=guest,password=
+   ```
+2. Set the interface to the mount point:
+   ```json
+   "interface": "/mnt/my_printer"
+   ```
+
+#### Network Printers (Ethernet/WiFi)
+If your printer has an IP address, connect directly via TCP:
+```json
+"interface": "tcp://192.168.1.100"
+```
+
 
 ## Development
 
