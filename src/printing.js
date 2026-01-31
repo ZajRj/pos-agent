@@ -93,6 +93,7 @@ async function processCommand(printer, cmd) {
             if (cmd.rows && Array.isArray(cmd.rows)) {
                 // Formatting rows for node-thermal-printer tableCustom
                 const formattedRows = cmd.rows.map(row => {
+                    if (!Array.isArray(row)) return []; // Defensive check
                     return row.map((cell, idx) => {
                         const colDef = (cmd.columns && cmd.columns[idx]) || {};
                         return {
@@ -171,13 +172,13 @@ async function processCommand(printer, cmd) {
 // --- Main Orchestrator ---
 
 const executePrintJob = async (payload) => {
-    return (printingLock = printingLock.then(async () => {
+    const jobPromise = printingLock.then(async () => {
         let printer;
         try {
             printer = getPrinter();
         } catch (e) {
             console.error("Critical: Printer initialization failed.", e);
-            throw new Error("Printer initialization failed: " + e.message);
+            throw new Error("Printer initialization failed: " + (e.message || "Unknown error"));
         }
 
         printer.clear();
@@ -201,23 +202,27 @@ const executePrintJob = async (payload) => {
                 console.log("Impresión enviada correctamente.");
             } catch (e) {
                 console.error("Error al enviar impresión:", e.message);
-                throw new Error(`Printer Error: ${e.message}`);
+                throw new Error(`Printer Error: ${e.message || "Execution failed"}`);
             }
         }
         printer.clear();
     }).catch(e => {
         console.error("Print job failed in queue:", e);
         throw e;
-    }));
+    });
+
+    // Update the lock to always resolve/reject, but the next job should wait
+    printingLock = jobPromise.catch(() => { });
+    return jobPromise;
 };
 
 const openCashRegister = async () => {
-    return (printingLock = printingLock.then(async () => {
+    const jobPromise = printingLock.then(async () => {
         let printer;
         try {
             printer = getPrinter();
         } catch (e) {
-            throw new Error("Printer initialization failed: " + e.message);
+            throw new Error("Printer initialization failed: " + (e.message || "Unknown error"));
         }
 
         printer.clear();
@@ -228,10 +233,16 @@ const openCashRegister = async () => {
                 printer.openCashDrawer();
                 console.log("Cash register open sent successfully.");
             } catch (e) {
-                throw new Error(`Printer Error: ${e.message}`);
+                throw new Error(`Printer Error: ${e.message || "Drawer open failed"}`);
             }
         }
-    }));
+    }).catch(e => {
+        console.error("Open drawer failed in queue:", e);
+        throw e;
+    });
+
+    printingLock = jobPromise.catch(() => { });
+    return jobPromise;
 };
 
 const getLastJob = () => lastJob;

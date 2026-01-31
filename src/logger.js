@@ -19,7 +19,12 @@ function logCrash(type, err) {
 }
 
 function captureLog(type, args) {
-    const msg = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ');
+    const msg = args.map(arg => {
+        if (arg instanceof Error) {
+            return `${arg.message}\n${arg.stack}`;
+        }
+        return (typeof arg === 'object' ? JSON.stringify(arg) : String(arg));
+    }).join(' ');
     const timestamp = new Date().toISOString();
     const entry = `[${timestamp}] [${type}] ${msg}`;
 
